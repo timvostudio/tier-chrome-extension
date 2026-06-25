@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwVnlbaSwqfAt2sW3vC6NUUVNtcEqwJ354nWDDEbe7Sqs7MG79zhrF6UHHnrfes/vXMEO3ebreqYX82Vh1iW6dR1blMZs4VZHwIlVz/YUULlBuCVONrERBVPGNQo2GQtJrbWBhg7GyBHCaFemwvabC/nTcrQJwecZyljUfFAb4mjcQqNNtdYPBFBZKk2BPHP0bF4D5rImPBy2N3TUwE9KPOeCjlGllnoBIBAjADkZfl6cRh9uOtTcPet7xNrKwki9TipfiqP37N/+oWmex++AGUMP6LpU7yGkh6IYPtfnMxqwVm8lanLRXXdunaINYutNE4eOVyJXFkBJrFKyn06ADwIDAQAB",
+  "name": "Tier",
+  "description": "Priority task system for real estate agents and entrepreneurs.",
+  "version": "1.0",
+  "permissions": ["identity", "storage", "alarms", "notifications"],
+  "host_permissions": ["https://www.googleapis.com/*"],
+  "oauth2": {
+    "client_id": "1049499776869-p9gl91ua425rm1rgf3cs4fm1u5ifl0qa.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/calendar.readonly",
+      "https://www.googleapis.com/auth/gmail.readonly"
+    ]
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

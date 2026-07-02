@@ -37,7 +37,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 async function updateBadge() {
   try {
     const tasks = await self.TierStorage.getTasks();
-    const count = self.TierCalendar.countDueToday(tasks);
+    const count = tasks.filter((t) => !t.completed).length;
     await chrome.action.setBadgeBackgroundColor({ color: BADGE_RED });
     if (chrome.action.setBadgeTextColor) {
       await chrome.action.setBadgeTextColor({ color: "#ffffff" });

@@ -29,12 +29,19 @@
       <!-- Rendered dynamically by popup.js -->
     </div>
 
-    <div class="ask-ai-bar">
-      <div class="ask-ai-box">
-        <span class="ask-ai-icon">?</span>
-        <input type="text" class="ask-ai-input" id="askAiInput" placeholder="Do you need help completing any tasks today?" />
+    <div class="ask-ai-bar" id="askAiBar">
+<div class="ask-ai-messages" id="askAiMessages"></div>
+      <div class="ask-ai-row">
+        <div class="ask-ai-box">
+          <div class="ask-ai-icon">?</div>
+          <input type="text" class="ask-ai-input" id="askAiInput" placeholder='Type "help" to view services' />
+          <button class="ask-ai-send" id="askAiSend" aria-label="Send">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 6H11M6 1L11 6L6 11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
       </div>
     </div>
+
   </div>
 
   <script src="storage.js"></script>

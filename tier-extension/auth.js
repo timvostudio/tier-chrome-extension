@@ -27,6 +27,19 @@ async function fetchUserEmail(token) {
   return data.email;
 }
 
+async function fetchUserProfile(token) {
+  const res = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to fetch user profile");
+  const data = await res.json();
+  return {
+    email:       data.email || "",
+    given_name:  data.given_name || "",
+    family_name: data.family_name || "",
+  };
+}
+
 async function disconnect() {
   try {
     const token = await getAuthToken(false);
@@ -42,5 +55,6 @@ self.TierAuth = {
   getAuthToken,
   removeCachedToken,
   fetchUserEmail,
+  fetchUserProfile,
   disconnect,
 };

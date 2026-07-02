@@ -8,6 +8,7 @@ const KEYS = {
   SETTINGS: "tier_settings",
   SUGGESTIONS: "tier_suggestions",
   STALLED_NOTIFIED: "tier_stalled_notified",
+  PROPERTIES: "tier_properties",
 };
 
 const DEFAULT_SETTINGS = {
@@ -15,6 +16,7 @@ const DEFAULT_SETTINGS = {
   showCompleted: false,
   showSourceBadges: true,
   gmailScanEnabled: true,
+  nameTitle: "Mr.",
 };
 
 async function getTasks() {
@@ -115,6 +117,25 @@ async function setStalledNotified(map) {
   await chrome.storage.local.set({ [KEYS.STALLED_NOTIFIED]: map });
 }
 
+async function getProperties() {
+  const { [KEYS.PROPERTIES]: props = [] } = await chrome.storage.local.get(KEYS.PROPERTIES);
+  return props;
+}
+
+async function saveProperty(property) {
+  const props = await getProperties();
+  const idx = props.findIndex((p) => p.id === property.id);
+  if (idx >= 0) props[idx] = property;
+  else props.push(property);
+  await chrome.storage.local.set({ [KEYS.PROPERTIES]: props });
+  return property;
+}
+
+async function deleteProperty(id) {
+  const props = await getProperties();
+  await chrome.storage.local.set({ [KEYS.PROPERTIES]: props.filter((p) => p.id !== id) });
+}
+
 self.TierStorage = {
   getTasks,
   saveTask,
@@ -133,4 +154,7 @@ self.TierStorage = {
   removeSuggestion,
   getStalledNotified,
   setStalledNotified,
+  getProperties,
+  saveProperty,
+  deleteProperty,
 };

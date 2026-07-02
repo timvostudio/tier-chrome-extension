@@ -4,6 +4,24 @@
 // user as a suggestion that requires explicit confirmation before it
 // touches any task.
 
+// Keywords that signal a buyer/renter is inquiring about a property
+const INQUIRY_KEYWORDS = [
+  "interested in", "schedule a showing", "schedule a viewing", "book a showing",
+  "like to see", "like to tour", "love to see", "want to see", "like to view",
+  "available for a showing", "available to show", "can we see", "can i see",
+  "make an offer", "submit an offer", "write an offer",
+  "is this still available", "still on the market", "asking price",
+  "more information about", "more info about", "send me more info",
+  "property at", "listing at", "home at", "house at",
+  "open house", "pre-approval", "pre approval",
+];
+
+// Address words to skip when fuzzy-matching email text to a property
+const ADDR_STOP_WORDS = new Set([
+  "st","ave","rd","blvd","dr","ln","ct","way","pl","the","and","of","a","an",
+  "street","avenue","road","boulevard","drive","lane","court","place",
+]);
+
 const COMPLETION_PHRASES = [
   "done", "completed", "finished", "wrapped up", "sent over", "sent the",
   "closed", "signed", "all set", "took care of", "handled", "submitted",
@@ -121,6 +139,25 @@ function titleFromSubject(subject) {
   return subject.replace(/^(re|fwd|fw):\s*/i, "").trim();
 }
 
+function findMatchingProperty(text, properties) {
+  if (!properties || properties.length === 0) return null;
+  const lower = text.toLowerCase();
+  let best = null;
+  let bestScore = 0;
+
+  for (const prop of properties) {
+    if (!prop.address) continue;
+    const words = prop.address.toLowerCase()
+      .split(/[\s,]+/)
+      .filter((w) => w.length > 2 && !ADDR_STOP_WORDS.has(w));
+    if (words.length === 0) continue;
+    const hits = words.filter((w) => lower.includes(w)).length;
+    const score = hits / words.length;
+    if (score >= 0.5 && score > bestScore) { best = prop; bestScore = score; }
+  }
+  return best;
+}
+
 function findMatchingOpenTask(text, tasks) {
   const lower = text.toLowerCase();
   return tasks.find((t) => {
@@ -132,7 +169,7 @@ function findMatchingOpenTask(text, tasks) {
   });
 }
 
-function detectSuggestions(messages, existingTasks, existingSuggestions) {
+function detectSuggestions(messages, existingTasks, existingSuggestions, properties = []) {
   const suggestions = [];
   const seenKeys = new Set(existingSuggestions.map((s) => `${s.sourceEmailId}:${s.type}`));
 
@@ -140,6 +177,31 @@ function detectSuggestions(messages, existingTasks, existingSuggestions) {
     const text = `${message.subject} ${message.snippet} ${message.body}`;
     const lower = text.toLowerCase();
 
+    // ── Property inquiry detection (highest priority) ─────────────────────────
+    const hasInquiryPhrase = INQUIRY_KEYWORDS.some((p) => lower.includes(p));
+    if (hasInquiryPhrase) {
+      const matchedProp = findMatchingProperty(text, properties);
+      const key = `${message.id}:inquiry`;
+      if (!seenKeys.has(key)) {
+        const senderName = (message.from || "").replace(/<[^>]+>/, "").trim() || "Unknown sender";
+        suggestions.push({
+          id: key,
+          type: "property_inquiry",
+          propId: matchedProp ? matchedProp.id : null,
+          propAddress: matchedProp ? matchedProp.address : null,
+          title: `Reply to inquiry — ${escapeForStorage(senderName)}`,
+          sourceEmailId: message.id,
+          sourceSubject: message.subject,
+          snippet: message.snippet,
+          from: message.from,
+          createdAt: Date.now(),
+        });
+        seenKeys.add(key);
+      }
+      continue;
+    }
+
+    // ── Existing-task completion signal ───────────────────────────────────────
     const matchedTask = findMatchingOpenTask(text, existingTasks);
     const hasCompletionPhrase = COMPLETION_PHRASES.some((p) => lower.includes(p));
     if (matchedTask && hasCompletionPhrase) {
@@ -161,6 +223,7 @@ function detectSuggestions(messages, existingTasks, existingSuggestions) {
       continue;
     }
 
+    // ── New task creation signal ───────────────────────────────────────────────
     const hasCreationPhrase = CREATION_PHRASES.some((p) => lower.includes(p));
     if (hasCreationPhrase && !matchedTask) {
       const key = `${message.id}:create`;
@@ -183,6 +246,10 @@ function detectSuggestions(messages, existingTasks, existingSuggestions) {
   }
 
   return suggestions;
+}
+
+function escapeForStorage(str) {
+  return str.replace(/[<>"&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", '"': "&quot;", "&": "&amp;" }[c]));
 }
 
 async function scanGmail() {

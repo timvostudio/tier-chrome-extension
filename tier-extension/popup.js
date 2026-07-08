@@ -1487,80 +1487,109 @@ function suggestStageForEmail(email, stages) {
   return bestScore >= 0.2 ? best : -1;
 }
 
+const EC_AVATAR_COLORS = ["#7c9bde","#e07b7b","#6dbf91","#d4956a","#9b7fd4","#5fb8c9","#d47a9a","#8fb86d"];
+
 function emailCardHtml(email, idx, stages) {
-  const suggested = email.stageIdx !== null ? email.stageIdx : suggestStageForEmail(email, stages);
-  const stageName = suggested >= 0 ? stages[suggested]?.name : null;
-  const dateStr = email.date ? new Date(email.date).toLocaleDateString([], { month: "short", day: "numeric" }) : "";
+  // Sender avatar
+  const rawFrom    = email.from || "";
+  const senderName = rawFrom.replace(/<[^>]+>/, "").trim().replace(/^["']|["']$/g, "") || "?";
+  const senderAddr = (rawFrom.match(/<([^>]+)>/) || [])[1] || rawFrom;
+  const initial    = (senderName[0] || "?").toUpperCase();
+  let hash = 0;
+  for (const c of senderName) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff;
+  const avatarBg = EC_AVATAR_COLORS[hash % EC_AVATAR_COLORS.length];
+
+  const suggested  = (email.stageIdx !== null && email.stageIdx >= 0) ? email.stageIdx : suggestStageForEmail(email, stages);
+  const stageName  = suggested >= 0 ? stages[suggested]?.name : null;
+  const dateStr    = email.date
+    ? new Date(email.date).toLocaleDateString([], { month: "short", day: "numeric" })
+    : "";
 
   const stageOptions = stages.map((s, i) =>
     `<option value="${i}" ${i === suggested ? "selected" : ""}>${i + 1}. ${escapeHtml(s.name)}</option>`
   ).join("");
 
-  const ageMs   = Date.now() - (email.lastActivity || new Date(email.date).getTime() || 0);
+  const ageMs    = Date.now() - (email.lastActivity || new Date(email.date).getTime() || 0);
   const staleDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
   const isStale   = !email.replied && staleDays >= 5;
 
+  const lightbulbSvg = `<svg width="10" height="10" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="4.2" r="2.8" stroke="currentColor" stroke-width="1.1"/><path d="M3.8 7.2h3.4M4.4 8.8h2.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>`;
+
   return `
     <div class="email-card${email.taskAdded ? " email-card-done" : ""}${email.replied ? " email-card-replied" : ""}" data-eidx="${idx}">
-      <div class="email-card-header">
-        <div class="email-subject">${escapeHtml(email.subject)}</div>
-        <div class="email-card-header-right">
-          <div class="email-date">${escapeHtml(dateStr)}</div>
-          <button class="email-delete-btn" data-eidx="${idx}" title="Delete email">✕</button>
+
+      <!-- Card header row -->
+      <div class="ec-head">
+        <div class="ec-avatar" style="background:${avatarBg}">${escapeHtml(initial)}</div>
+        <div class="ec-meta">
+          <div class="ec-subject">${escapeHtml(email.subject)}</div>
+          <div class="ec-from">${escapeHtml(senderName)}<span class="ec-addr"> · ${escapeHtml(senderAddr)}</span></div>
+        </div>
+        <div class="ec-head-right">
+          <span class="ec-date">${escapeHtml(dateStr)}</span>
+          <button class="email-delete-btn" data-eidx="${idx}" title="Delete">✕</button>
         </div>
       </div>
-      <div class="email-from">From: ${escapeHtml(email.from)}</div>
-      ${email.to ? `<div class="email-meta-row">To: ${escapeHtml(email.to)}</div>` : ""}
-      ${email.cc ? `<div class="email-meta-row">Cc: ${escapeHtml(email.cc)}</div>` : ""}
-      <div class="email-snippet">${escapeHtml(email.snippet)}</div>
 
+      <!-- Snippet -->
+      ${email.snippet ? `<div class="ec-snippet">${escapeHtml(email.snippet)}</div>` : ""}
+
+      <!-- Stale warning -->
       ${isStale ? `
-        <div class="email-stale-bar" data-eidx="${idx}">
-          <span class="email-stale-text">⏱ No activity for ${staleDays} days — still active?</span>
-          <div class="email-stale-actions">
+        <div class="ec-stale">
+          <span class="ec-stale-icon">⏱</span>
+          <span class="ec-stale-text">No reply in ${staleDays} days</span>
+          <div class="ec-stale-btns">
             <button class="email-stale-yes" data-eidx="${idx}">Still active</button>
-            <button class="email-stale-no"  data-eidx="${idx}">Mark closed</button>
+            <button class="email-stale-no"  data-eidx="${idx}">Close</button>
           </div>
         </div>
       ` : ""}
 
-      ${email.replied ? `
-        <div class="email-replied-badge">✓ Replied ${email.repliedAt ? "· " + new Date(email.repliedAt).toLocaleDateString([], { month: "short", day: "numeric" }) : ""}</div>
-      ` : `
-        <div class="email-reply-row">
-          <button class="email-reply-btn"    data-eidx="${idx}">↩ Reply in Gmail</button>
-          <button class="email-ai-reply-btn" data-eidx="${idx}">✦ AI Reply</button>
-        </div>
-      `}
+      <!-- Footer: reply + stage -->
+      <div class="ec-footer">
 
-      <div class="email-divider"></div>
+        ${email.replied ? `
+          <div class="ec-replied-row">
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="#30a46c" stroke-width="1.2"/><path d="M3.5 6l2 2 3-3" stroke="#30a46c" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Replied${email.repliedAt ? " · " + new Date(email.repliedAt).toLocaleDateString([], { month:"short", day:"numeric" }) : ""}</span>
+          </div>
+        ` : `
+          <div class="ec-reply-row">
+            <button class="email-reply-btn" data-eidx="${idx}">
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M1.5 4.5L5 1.5V3.5C9.5 3.5 11 6.5 10.5 10C9 7.5 7 7 5 7V9L1.5 4.5Z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/></svg>
+              Reply in Gmail
+            </button>
+            <button class="email-ai-reply-btn" data-eidx="${idx}">
+              ✦ AI Reply
+            </button>
+          </div>
+        `}
 
-      ${email.taskAdded ? `
-        <div class="email-added-badge">✓ Added to Stage ${(email.stageIdx + 1)}: ${escapeHtml(stages[email.stageIdx]?.name || "")}</div>
-      ` : stageName ? `
-        <div class="email-suggest">
-          <div class="email-suggest-label"><svg width="11" height="11" viewBox="0 0 11 11" fill="none" style="display:inline-block;vertical-align:middle;margin-right:4px;margin-bottom:1px"><circle cx="5.5" cy="4.2" r="2.8" stroke="currentColor" stroke-width="1.1"/><path d="M3.8 7.2h3.4M4.4 8.8h2.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>SUGGESTED STAGE</div>
-          <select class="email-stage-select" data-eidx="${idx}">
-            <option value="-1">— Select a stage —</option>
-            ${stageOptions}
-          </select>
-          <div class="email-suggest-actions">
-            <span class="email-suggest-hint">AI matched: <strong>${escapeHtml(stageName)}</strong></span>
-            <button class="email-confirm-btn" data-eidx="${idx}">+ Add task</button>
+        <div class="ec-divider"></div>
+
+        ${email.taskAdded ? `
+          <div class="ec-added-row">
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="#30a46c" stroke-width="1.2"/><path d="M3.5 6l2 2 3-3" stroke="#30a46c" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Added to Stage ${email.stageIdx + 1}: <strong>${escapeHtml(stages[email.stageIdx]?.name || "")}</strong>
           </div>
-        </div>
-      ` : `
-        <div class="email-suggest">
-          <div class="email-suggest-label">Add to stage</div>
-          <select class="email-stage-select" data-eidx="${idx}">
-            <option value="-1">— Select a stage —</option>
-            ${stageOptions}
-          </select>
-          <div class="email-suggest-actions">
-            <button class="email-confirm-btn" data-eidx="${idx}">+ Add task</button>
+        ` : `
+          <div class="ec-stage-section">
+            <div class="ec-stage-label">
+              ${stageName ? `${lightbulbSvg} Suggested stage` : "Add to stage"}
+            </div>
+            <div class="ec-stage-row">
+              <select class="email-stage-select ec-stage-select" data-eidx="${idx}">
+                <option value="-1">— Select stage —</option>
+                ${stageOptions}
+              </select>
+              <button class="email-confirm-btn" data-eidx="${idx}">+ Add</button>
+            </div>
+            ${stageName ? `<div class="ec-stage-match">Matched: <strong>${escapeHtml(stageName)}</strong></div>` : ""}
           </div>
-        </div>
-      `}
+        `}
+
+      </div>
     </div>`;
 }
 
@@ -1576,67 +1605,85 @@ async function renderPropertyEmails(propId) {
     const listEl = document.getElementById("emailList");
     if (!listEl) return;
     const emails = prop.emails || [];
-    listEl.innerHTML = emails.length === 0
-      ? `<div class="email-empty">No emails yet — checking your inbox now…</div>`
-      : emails.map((e, i) => emailCardHtml(e, i, prop.stages)).join("");
+    if (emails.length === 0) {
+      listEl.innerHTML = `<div class="ea-empty">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M2 7.5L12 13L22 7.5" stroke="currentColor" stroke-width="1.2"/></svg>
+        <div class="ea-empty-title">No emails yet</div>
+        <div class="ea-empty-sub">Tap Scan to check your inbox</div>
+      </div>`;
+    } else {
+      listEl.innerHTML = emails.map((e, i) => emailCardHtml(e, i, prop.stages)).join("");
+    }
     wireEmailCards(prop, emails);
   }
 
-  const scanIcon = `<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M12.5 7A5.5 5.5 0 1 1 10.6 3M12.5 1.5V4.5H9.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const scanIcon = `<svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M12.5 7A5.5 5.5 0 1 1 10.6 3M12.5 1.5V4.5H9.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const emailCount  = (prop.emails || []).length;
+  const shortAddr   = prop.address?.split(",").slice(0, 2).join(",") || prop.address || "Property";
+  const unreplied   = (prop.emails || []).filter(e => !e.replied && !e.taskAdded).length;
 
   bodyEl.innerHTML = `
     <div class="modal-header">
       <button class="back-btn" id="emailBackBtn">&larr; Back</button>
-      <span class="modal-title">Email Archive</span>
+      <span class="modal-title">Inbox</span>
     </div>
-    <div class="email-archive-head">
-      <div class="prop-detail-address">${escapeHtml(prop.address)}</div>
-      <button class="email-scan-btn" id="emailScanBtn">${scanIcon} Scan emails</button>
+
+    <div class="ea-hero">
+      <div class="ea-hero-icon">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3" width="13" height="10" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M1.5 5.5L8 9.5L14.5 5.5" stroke="currentColor" stroke-width="1.2"/></svg>
+      </div>
+      <div class="ea-hero-info">
+        <div class="ea-hero-addr">${escapeHtml(shortAddr)}</div>
+        <div class="ea-hero-stats">
+          <span class="ea-hero-count" id="emailCountBadge">${emailCount} email${emailCount !== 1 ? "s" : ""}</span>
+          ${unreplied > 0 ? `<span class="ea-hero-unreplied">${unreplied} pending</span>` : ""}
+          <span class="ea-scan-status" id="emailScanStatus"></span>
+        </div>
+      </div>
+      <button class="ea-scan-btn" id="emailScanBtn">${scanIcon} Scan</button>
     </div>
-    <div id="emailScanStatus" class="email-scan-status"></div>
-    <div id="emailList" class="email-list">
-      ${(prop.emails || []).length === 0
-        ? `<div class="email-empty">No emails yet — checking your inbox now…</div>`
+
+    <div id="emailList" class="ea-list">
+      ${emailCount === 0
+        ? `<div class="ea-empty">
+             <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M2 7.5L12 13L22 7.5" stroke="currentColor" stroke-width="1.2"/></svg>
+             <div class="ea-empty-title">No emails yet</div>
+             <div class="ea-empty-sub">Tap Scan to check your inbox</div>
+           </div>`
         : (prop.emails || []).map((e, i) => emailCardHtml(e, i, prop.stages)).join("")}
     </div>`;
 
   document.getElementById("emailBackBtn").addEventListener("click", () => renderPropertyDetail(propId));
 
   async function runScan(silent = false) {
-    const btn    = document.getElementById("emailScanBtn");
-    const status = document.getElementById("emailScanStatus");
+    const btn        = document.getElementById("emailScanBtn");
+    const status     = document.getElementById("emailScanStatus");
+    const countBadge = document.getElementById("emailCountBadge");
     if (!btn) return;
     btn.disabled = true;
-    if (!silent) { btn.textContent = "Scanning…"; }
+    if (!silent) btn.innerHTML = `<span class="ea-spin"></span> Scanning…`;
     try {
       const newEmails = await scanPropertyEmails(prop);
       if (newEmails.length > 0) {
         if (!prop.emails) prop.emails = [];
         prop.emails.unshift(...newEmails);
         await self.TierStorage.saveProperty(prop);
-        if (status) status.textContent = `Found ${newEmails.length} new email${newEmails.length !== 1 ? "s" : ""}.`;
+        if (status) { status.textContent = `+${newEmails.length} new`; status.classList.add("ea-status-new"); }
+        if (countBadge) countBadge.textContent = `${prop.emails.length} email${prop.emails.length !== 1 ? "s" : ""}`;
       } else {
-        if (status && !silent) status.textContent = "No new emails found.";
+        if (status && !silent) status.textContent = "Up to date";
       }
-      // Re-read from prop (never mutate in place) and re-render
       renderList();
     } catch (err) {
-      if (status && !silent) status.textContent = "Scan failed — check your connection.";
+      if (status && !silent) status.textContent = "Scan failed";
       console.error(err);
-      // Still render whatever is saved so existing emails don't disappear
       renderList();
     }
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = `${scanIcon} Scan emails`;
-    }
+    if (btn) { btn.disabled = false; btn.innerHTML = `${scanIcon} Scan`; }
   }
 
   document.getElementById("emailScanBtn").addEventListener("click", () => runScan(false));
-
-  // Auto-scan silently on open so new emails appear without any button tap
   runScan(true);
-
   wireEmailCards(prop, prop.emails || []);
 }
 
@@ -1798,9 +1845,15 @@ function refreshEmailCard(idx, email, prop, emails) {
 function reRenderEmailList(prop, emails) {
   const listEl = document.getElementById("emailList");
   if (!listEl) return;
-  listEl.innerHTML = emails.length === 0
-    ? `<div class="email-empty">No emails archived yet. Tap "Scan emails" to search your inbox.</div>`
-    : emails.map((e, i) => emailCardHtml(e, i, prop.stages)).join("");
+  if (emails.length === 0) {
+    listEl.innerHTML = `<div class="ea-empty">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M2 7.5L12 13L22 7.5" stroke="currentColor" stroke-width="1.2"/></svg>
+      <div class="ea-empty-title">No emails yet</div>
+      <div class="ea-empty-sub">Tap Scan to check your inbox</div>
+    </div>`;
+  } else {
+    listEl.innerHTML = emails.map((e, i) => emailCardHtml(e, i, prop.stages)).join("");
+  }
   wireEmailCards(prop, emails);
 }
 

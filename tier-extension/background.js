@@ -22,6 +22,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     await runSyncAndNotify();
   } else if (alarm.name === BADGE_ALARM) {
     await updateBadge();
+    await fireTaskReminders();
   }
 });
 
@@ -33,6 +34,49 @@ chrome.storage.onChanged.addListener((changes, area) => {
     updateBadge();
   }
 });
+
+async function fireTaskReminders() {
+  try {
+    const now = Date.now();
+
+    // Main task list
+    const tasks    = await self.TierStorage.getTasks();
+    let tasksDirty = false;
+    for (const task of tasks) {
+      if (task.completed || !task.reminder?.nextAt) continue;
+      if (now < task.reminder.nextAt) continue;
+      chrome.notifications.create(`tier-r-${task.id}-${now}`, {
+        type: "basic", iconUrl: "icons/icon128.png",
+        title: "Tier — Task Reminder", message: task.title,
+      });
+      task.reminder.nextAt = now + task.reminder.intervalMins * 60 * 1000;
+      tasksDirty = true;
+    }
+    if (tasksDirty) await self.TierStorage.saveTasks(tasks);
+
+    // Property stage tasks
+    const props = await self.TierStorage.getProperties();
+    for (const prop of props) {
+      let propDirty = false;
+      for (const stage of (prop.stages || [])) {
+        for (const stTask of (stage.tasks || [])) {
+          if (stTask.completed || !stTask.reminder?.nextAt) continue;
+          if (now < stTask.reminder.nextAt) continue;
+          chrome.notifications.create(`tier-r-${prop.id}-${stage.name}-${now}`, {
+            type: "basic", iconUrl: "icons/icon128.png",
+            title: `Tier — ${stage.name}`,
+            message: stTask.text,
+          });
+          stTask.reminder.nextAt = now + stTask.reminder.intervalMins * 60 * 1000;
+          propDirty = true;
+        }
+      }
+      if (propDirty) await self.TierStorage.saveProperty(prop);
+    }
+  } catch (err) {
+    console.error("Tier reminder check failed:", err);
+  }
+}
 
 async function updateBadge() {
   try {

@@ -51,6 +51,7 @@ const ESCROW_STAGES = [
   { name: "Wire Remaining Funds",             hint: "",                                        tasks: ["Wire down payment + closing costs","Confirm with escrow"] },
   { name: "Sign Loan Docs",                   hint: "Usually 1–3 days before closing",         tasks: [] },
   { name: "Close of Escrow",                  hint: "",                                        tasks: ["Loan funds","Title records","Keys released 🎉"] },
+  { name: "Miscellaneous",                    hint: "Any additional tasks that come up",        tasks: [] },
 ];
 
 function slugToAddress(slug) {
@@ -114,6 +115,16 @@ function currentStageName(prop) {
 function uuid() {
   return "task-" + Date.now() + "-" + Math.random().toString(16).slice(2);
 }
+
+function scheduleNextReminder(freq, fromTs = Date.now()) {
+  const DAY = 24 * 60 * 60 * 1000;
+  if (freq === "daily")  return fromTs + DAY;
+  if (freq === "2days")  return fromTs + 2 * DAY;
+  if (freq === "weekly") return fromTs + 7 * DAY;
+  return null;
+}
+
+const FREQ_LABEL = { daily: "Daily", "2days": "Every 2d", weekly: "Weekly" };
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -290,15 +301,6 @@ async function renderMain() {
       <button class="suggestion-review-btn" id="reviewSuggestionsBtn">Review</button>
     </div>`;
   }
-  html += `<div class="intro-section">`;
-  html += `<div class="intro-left">`;
-  html += await greetingHtml();
-  html += `<div class="today-date">${new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</div>`;
-  html += `<div class="sync-label">Last synced: ${lastSync ? timeAgo(lastSync) : "never"}</div>`;
-  html += `</div>`;
-  html += `<div class="intro-right">${timeOfDayIllustration()}</div>`;
-  html += `</div>`;
-  html += `<hr class="section-divider" />`;
 
   for (const tier of TIER_ORDER) {
     const meta = TIER_META[tier];
@@ -481,6 +483,7 @@ function taskCardHtml(task, settings) {
     </div>
     <div class="task-sub-row">
       <span class="task-due">Due: ${formatDue(task.deadline)}</span>
+      ${task.reminder ? `<span class="reminder-badge">${task.reminder.label}</span>` : ""}
       ${badge}
     </div>
   </div>`;
@@ -565,14 +568,7 @@ function todayLabel() {
 async function renderConnectScreen() {
   state.view = "connect";
   const properties = await self.TierStorage.getProperties();
-  let html = `<div class="intro-section">`;
-  html += `<div class="intro-left">`;
-  html += await greetingHtml();
-  html += `<div class="today-date">${new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</div>`;
-  html += `</div>`;
-  html += `<div class="intro-right">${timeOfDayIllustration()}</div>`;
-  html += `</div>`;
-  html += `<hr class="section-divider" />`;
+  let html = ``;
   html += `<div class="connect-refresh-msg">Refresh page to show all tasks for the day</div>`;
   html += buildPropertiesSectionHtml(properties);
   bodyEl.innerHTML = html;
@@ -629,11 +625,34 @@ function toDatetimeLocalValue(ts) {
 function renderForm() {
   state.view = "form";
   const task = state.editingTask;
-  const isEdit = !!task;
-  const title = isEdit ? task.title : "";
-  const notes = isEdit ? task.notes || "" : "";
-  const activeTier = isEdit ? task.tier : "yellow";
+  const isEdit      = !!task;
+  const title       = isEdit ? task.title       : "";
+  const notes       = isEdit ? task.notes || "" : "";
+  const activeTier  = isEdit ? task.tier        : "yellow";
   const deadlineValue = toDatetimeLocalValue(isEdit ? task.deadline : Date.now() + 24 * 60 * 60 * 1000);
+
+  // Existing reminder state
+  const existingReminder = isEdit && task.reminder ? task.reminder : null;
+  const reminderOn       = !!existingReminder;
+  const savedInterval    = existingReminder?.intervalMins || 60;
+  const savedUnit        = existingReminder?.unit         || "hours";
+  const savedCustomVal   = existingReminder?.customVal    || 1;
+  const savedTime        = existingReminder?.time         || "09:00";
+
+  // Preset intervals (in minutes)
+  const PRESETS = [
+    { label: "30 min",  mins: 30    },
+    { label: "1 hour",  mins: 60    },
+    { label: "2 hours", mins: 120   },
+    { label: "4 hours", mins: 240   },
+    { label: "Daily",   mins: 1440  },
+    { label: "Weekly",  mins: 10080 },
+    { label: "Custom",  mins: null  },
+  ];
+
+  const activePreset = existingReminder
+    ? (PRESETS.find(p => p.mins === savedInterval)?.label || "Custom")
+    : "1 hour";
 
   bodyEl.innerHTML = `
     <div class="modal-header">
@@ -650,7 +669,7 @@ function renderForm() {
         <input type="datetime-local" class="text-input" id="taskDeadline" value="${deadlineValue}" />
       </div>
       <div class="tier-toggle-row" id="tierToggleRow">
-        ${TIER_ORDER.map((tier) => `<div class="tier-toggle ${tier} ${tier === activeTier ? "active" : ""}" data-tier="${tier}">
+        ${TIER_ORDER.map(tier => `<div class="tier-toggle ${tier} ${tier === activeTier ? "active" : ""}" data-tier="${tier}">
           <span class="tier-dot ${tier}"></span>${TIER_META[tier].short}
         </div>`).join("")}
       </div>
@@ -658,6 +677,35 @@ function renderForm() {
         <label class="field-label">Notes (optional)</label>
         <textarea class="textarea-input" id="taskNotes" placeholder="Add details...">${escapeHtml(notes)}</textarea>
       </div>
+
+      <div class="reminder-section">
+        <div class="reminder-header-row">
+          <span class="reminder-label">Reminders</span>
+          <label class="reminder-toggle-wrap">
+            <input type="checkbox" id="reminderToggle" ${reminderOn ? "checked" : ""} />
+            <span class="reminder-toggle-track"><span class="reminder-toggle-thumb"></span></span>
+          </label>
+        </div>
+        <div class="reminder-body" id="reminderBody" style="display:${reminderOn ? "block" : "none"}">
+          <div class="reminder-preset-row" id="reminderPresets">
+            ${PRESETS.map(p => `<button class="rp-btn${p.label === activePreset && reminderOn ? " rp-active" : ""}" data-mins="${p.mins ?? ""}" data-label="${p.label}">${p.label}</button>`).join("")}
+          </div>
+          <div class="reminder-custom-row" id="reminderCustomRow" style="display:${activePreset === "Custom" && reminderOn ? "flex" : "none"}">
+            <span class="reminder-custom-label">Every</span>
+            <input type="number" class="reminder-custom-num" id="customVal" value="${savedCustomVal}" min="1" max="999" />
+            <select class="reminder-custom-unit" id="customUnit">
+              <option value="minutes" ${savedUnit === "minutes" ? "selected" : ""}>minutes</option>
+              <option value="hours"   ${savedUnit === "hours"   ? "selected" : ""}>hours</option>
+              <option value="days"    ${savedUnit === "days"    ? "selected" : ""}>days</option>
+            </select>
+          </div>
+          <div class="reminder-time-row" id="reminderTimeRow" style="display:${(savedInterval >= 1440) && reminderOn ? "flex" : "none"}">
+            <span class="reminder-custom-label">At</span>
+            <input type="time" class="reminder-time-input" id="reminderTime" value="${savedTime}" />
+          </div>
+        </div>
+      </div>
+
       <div class="form-actions">
         <button class="btn-ghost" id="cancelBtn">Cancel</button>
         <button class="btn-save" id="saveBtn">Save Task</button>
@@ -666,12 +714,34 @@ function renderForm() {
     </div>
   `;
 
-  let selectedTier = activeTier;
-  document.querySelectorAll("#tierToggleRow .tier-toggle").forEach((el) => {
+  let selectedTier   = activeTier;
+  let selectedPreset = activePreset;
+
+  document.querySelectorAll("#tierToggleRow .tier-toggle").forEach(el => {
     el.addEventListener("click", () => {
       selectedTier = el.dataset.tier;
-      document.querySelectorAll("#tierToggleRow .tier-toggle").forEach((e2) => e2.classList.remove("active"));
+      document.querySelectorAll("#tierToggleRow .tier-toggle").forEach(e2 => e2.classList.remove("active"));
       el.classList.add("active");
+    });
+  });
+
+  // Reminder toggle
+  const reminderToggle = document.getElementById("reminderToggle");
+  const reminderBody   = document.getElementById("reminderBody");
+  reminderToggle.addEventListener("change", () => {
+    reminderBody.style.display = reminderToggle.checked ? "block" : "none";
+  });
+
+  // Preset pills
+  document.querySelectorAll("#reminderPresets .rp-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      selectedPreset = btn.dataset.label;
+      document.querySelectorAll("#reminderPresets .rp-btn").forEach(b => b.classList.remove("rp-active"));
+      btn.classList.add("rp-active");
+      const isCustom   = selectedPreset === "Custom";
+      const isLongFreq = !isCustom && Number(btn.dataset.mins) >= 1440;
+      document.getElementById("reminderCustomRow").style.display = isCustom   ? "flex" : "none";
+      document.getElementById("reminderTimeRow").style.display   = isLongFreq ? "flex" : "none";
     });
   });
 
@@ -692,6 +762,32 @@ async function saveTaskForm(selectedTier) {
   const deadlineInput = document.getElementById("taskDeadline").value;
   if (!title) return;
 
+  // Build reminder object
+  const reminderOn = document.getElementById("reminderToggle")?.checked;
+  let reminder = null;
+  if (reminderOn) {
+    const activeBtn  = document.querySelector("#reminderPresets .rp-active");
+    const label      = activeBtn?.dataset.label || "1 hour";
+    const presetMins = activeBtn?.dataset.mins ? Number(activeBtn.dataset.mins) : null;
+    let intervalMins = presetMins;
+
+    if (label === "Custom" || !presetMins) {
+      const val  = parseInt(document.getElementById("customVal")?.value || "1");
+      const unit = document.getElementById("customUnit")?.value || "hours";
+      intervalMins = unit === "minutes" ? val : unit === "hours" ? val * 60 : val * 1440;
+    }
+
+    const time = document.getElementById("reminderTime")?.value || "09:00";
+    reminder = {
+      intervalMins,
+      label,
+      unit:      label === "Custom" ? (document.getElementById("customUnit")?.value || "hours") : null,
+      customVal: label === "Custom" ? parseInt(document.getElementById("customVal")?.value || "1") : null,
+      time,
+      nextAt: Date.now() + intervalMins * 60 * 1000,
+    };
+  }
+
   const task = state.editingTask;
   const now = Date.now();
   const parsedDeadline = deadlineInput ? new Date(deadlineInput).getTime() : NaN;
@@ -705,6 +801,7 @@ async function saveTaskForm(selectedTier) {
     notes,
     completed: task ? task.completed : false,
     createdAt: task ? task.createdAt : now,
+    reminder,
   };
 
   if (newTask.source === "calendar") {
@@ -1182,12 +1279,22 @@ async function renderPropertyDetail(propId) {
       ? `<svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`
       : (si + 1);
 
+    const emailTasks = stage.tasks.filter(t => t.fromEmail);
+    const hasNew     = emailTasks.some(t => t.isNew && !t.completed);
+    const allDone    = emailTasks.length > 0 && emailTasks.every(t => t.completed);
+    const notifDot   = hasNew  ? `<span class="stage-notif-dot stage-notif-new"  id="snd-${si}">!</span>`
+                     : allDone ? `<span class="stage-notif-dot stage-notif-done" id="snd-${si}">✓</span>`
+                     : "";
+
     html += `
       <div class="stage-card${done ? " stage-done" : ""}" id="sc-${si}">
         <div class="stage-header" data-si="${si}">
           <div class="stage-num${done ? " stage-num-done" : ""}" id="sn-${si}">${numHtml}</div>
           <div class="stage-info">
-            <div class="stage-name">${escapeHtml(stage.name)}</div>
+            <div class="stage-name-row">
+              <div class="stage-name">${escapeHtml(stage.name)}</div>
+              ${notifDot}
+            </div>
             ${stage.hint ? `<div class="stage-hint">${escapeHtml(stage.hint)}</div>` : ""}
             ${stage.tasks.length > 0 ? `
               <div class="stage-task-count" id="stc-${si}">${doneC}/${stage.tasks.length} tasks</div>
@@ -1242,6 +1349,13 @@ async function renderPropertyDetail(propId) {
       }
 
       prop.stages[si].expanded = !prop.stages[si].expanded;
+
+      // Clear "new" flag on email tasks when stage is opened
+      if (prop.stages[si].expanded) {
+        prop.stages[si].tasks.forEach(t => { if (t.isNew) t.isNew = false; });
+        refreshStageNotifDot(si, prop.stages[si]);
+      }
+
       await self.TierStorage.saveProperty(prop);
       document.getElementById(`sb-${si}`).style.display = prop.stages[si].expanded ? "block" : "none";
       document.getElementById(`schev-${si}`).textContent = prop.stages[si].expanded ? "▴" : "▾";
@@ -1314,7 +1428,15 @@ async function scanPropertyEmails(prop) {
   if (!listRes.ok) return [];
   const listData = await listRes.json();
   const ids = (listData.messages || []).map(m => m.id);
-  const existingIds = new Set((prop.emails || []).map(e => e.id));
+  const existingIds    = new Set((prop.emails || []).map(e => e.id));
+  const existingThreads = new Map((prop.emails || []).map(e => [e.threadId || e.id, e]));
+
+  // Update lastActivity on existing emails whose thread has new messages
+  for (const id of ids) {
+    if (!existingIds.has(id)) continue;
+    const existing = [...(prop.emails || [])].find(e => e.id === id);
+    if (existing) existing.lastActivity = Date.now();
+  }
 
   const emails = [];
   for (const id of ids) {
@@ -1335,6 +1457,7 @@ async function scanPropertyEmails(prop) {
 
     emails.push({
       id,
+      threadId:  data.threadId || id,
       subject,
       from:      get("From"),
       to:        get("To"),
@@ -1343,6 +1466,9 @@ async function scanPropertyEmails(prop) {
       snippet,
       stageIdx:  null,
       taskAdded: false,
+      replied:   false,
+      repliedAt: null,
+      lastActivity: Date.now(),
     });
   }
   return emails;
@@ -1370,8 +1496,12 @@ function emailCardHtml(email, idx, stages) {
     `<option value="${i}" ${i === suggested ? "selected" : ""}>${i + 1}. ${escapeHtml(s.name)}</option>`
   ).join("");
 
+  const ageMs   = Date.now() - (email.lastActivity || new Date(email.date).getTime() || 0);
+  const staleDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+  const isStale   = !email.replied && staleDays >= 5;
+
   return `
-    <div class="email-card${email.taskAdded ? " email-card-done" : ""}" data-eidx="${idx}">
+    <div class="email-card${email.taskAdded ? " email-card-done" : ""}${email.replied ? " email-card-replied" : ""}" data-eidx="${idx}">
       <div class="email-card-header">
         <div class="email-subject">${escapeHtml(email.subject)}</div>
         <div class="email-card-header-right">
@@ -1380,9 +1510,31 @@ function emailCardHtml(email, idx, stages) {
         </div>
       </div>
       <div class="email-from">From: ${escapeHtml(email.from)}</div>
-      ${email.to  ? `<div class="email-meta-row">To: ${escapeHtml(email.to)}</div>`  : ""}
-      ${email.cc  ? `<div class="email-meta-row">Cc: ${escapeHtml(email.cc)}</div>`  : ""}
+      ${email.to ? `<div class="email-meta-row">To: ${escapeHtml(email.to)}</div>` : ""}
+      ${email.cc ? `<div class="email-meta-row">Cc: ${escapeHtml(email.cc)}</div>` : ""}
       <div class="email-snippet">${escapeHtml(email.snippet)}</div>
+
+      ${isStale ? `
+        <div class="email-stale-bar" data-eidx="${idx}">
+          <span class="email-stale-text">⏱ No activity for ${staleDays} days — still active?</span>
+          <div class="email-stale-actions">
+            <button class="email-stale-yes" data-eidx="${idx}">Still active</button>
+            <button class="email-stale-no"  data-eidx="${idx}">Mark closed</button>
+          </div>
+        </div>
+      ` : ""}
+
+      ${email.replied ? `
+        <div class="email-replied-badge">✓ Replied ${email.repliedAt ? "· " + new Date(email.repliedAt).toLocaleDateString([], { month: "short", day: "numeric" }) : ""}</div>
+      ` : `
+        <div class="email-reply-row">
+          <button class="email-reply-btn"    data-eidx="${idx}">↩ Reply in Gmail</button>
+          <button class="email-ai-reply-btn" data-eidx="${idx}">✦ AI Reply</button>
+        </div>
+      `}
+
+      <div class="email-divider"></div>
+
       ${email.taskAdded ? `
         <div class="email-added-badge">✓ Added to Stage ${(email.stageIdx + 1)}: ${escapeHtml(stages[email.stageIdx]?.name || "")}</div>
       ` : stageName ? `
@@ -1542,6 +1694,7 @@ function showAddTaskModal(email, suggestedIdx, prop, emails, onSave) {
 }
 
 function wireEmailCards(prop, emails) {
+  // Add task
   document.querySelectorAll(".email-confirm-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const idx          = parseInt(btn.dataset.eidx);
@@ -1550,35 +1703,197 @@ function wireEmailCards(prop, emails) {
       const email        = emails[idx];
 
       showAddTaskModal(email, suggestedIdx, prop, emails, async (taskText, stageIdx) => {
-        const task = { id: `email-${email.id}-${Date.now()}`, text: taskText, completed: false };
+        const senderName = (email.from || "").replace(/<[^>]+>/, "").trim().split(/\s+/)[0] || "";
+        const labelledText = senderName ? `${taskText} — from ${senderName}` : taskText;
+        const task = { id: `email-${email.id}-${Date.now()}`, text: labelledText, completed: false, fromEmail: true, isNew: true };
         prop.stages[stageIdx].tasks.push(task);
         email.stageIdx  = stageIdx;
         email.taskAdded = true;
         prop.emails     = emails;
         await self.TierStorage.saveProperty(prop);
-
-        const card = document.querySelector(`.email-card[data-eidx="${idx}"]`);
-        if (card) card.outerHTML = emailCardHtml(email, idx, prop.stages);
-        wireEmailCards(prop, emails);
+        refreshEmailCard(idx, email, prop, emails);
       });
     });
   });
 
+  // Delete
   document.querySelectorAll(".email-delete-btn").forEach(btn => {
     btn.addEventListener("click", async () => {
       const idx = parseInt(btn.dataset.eidx);
       emails.splice(idx, 1);
       prop.emails = emails;
       await self.TierStorage.saveProperty(prop);
+      reRenderEmailList(prop, emails);
+    });
+  });
 
-      const listEl = document.getElementById("emailList");
-      if (listEl) {
-        listEl.innerHTML = emails.length === 0
-          ? `<div class="email-empty">No emails archived yet. Tap "Scan emails" to search your inbox.</div>`
-          : emails.map((e, i) => emailCardHtml(e, i, prop.stages)).join("");
-        wireEmailCards(prop, emails);
+  // Reply in Gmail
+  document.querySelectorAll(".email-reply-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const idx   = parseInt(btn.dataset.eidx);
+      const email = emails[idx];
+      const threadId = email.threadId || email.id;
+      chrome.tabs.create({ url: `https://mail.google.com/mail/u/0/#inbox/${threadId}` });
+      email.replied   = true;
+      email.repliedAt = Date.now();
+      email.lastActivity = Date.now();
+      prop.emails = emails;
+      await self.TierStorage.saveProperty(prop);
+      refreshEmailCard(idx, email, prop, emails);
+      showEmailRepliedToast();
+    });
+  });
+
+  // AI Reply
+  document.querySelectorAll(".email-ai-reply-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const idx   = parseInt(btn.dataset.eidx);
+      const email = emails[idx];
+      btn.textContent = "Generating…";
+      btn.disabled = true;
+      try {
+        const draft = await generateAiReply(email, prop);
+        showAiReplyModal(draft, email, idx, prop, emails);
+      } catch (err) {
+        btn.textContent = "✦ AI Reply";
+        btn.disabled = false;
+        console.error("AI reply failed:", err);
       }
     });
+  });
+
+  // Stale — still active
+  document.querySelectorAll(".email-stale-yes").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const idx = parseInt(btn.dataset.eidx);
+      emails[idx].lastActivity = Date.now();
+      prop.emails = emails;
+      await self.TierStorage.saveProperty(prop);
+      refreshEmailCard(idx, emails[idx], prop, emails);
+    });
+  });
+
+  // Stale — mark closed
+  document.querySelectorAll(".email-stale-no").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const idx = parseInt(btn.dataset.eidx);
+      emails[idx].replied   = true;
+      emails[idx].repliedAt = null;
+      emails[idx].lastActivity = Date.now();
+      prop.emails = emails;
+      await self.TierStorage.saveProperty(prop);
+      refreshEmailCard(idx, emails[idx], prop, emails);
+    });
+  });
+}
+
+function refreshEmailCard(idx, email, prop, emails) {
+  const card = document.querySelector(`.email-card[data-eidx="${idx}"]`);
+  if (card) {
+    card.outerHTML = emailCardHtml(email, idx, prop.stages);
+    wireEmailCards(prop, emails);
+  }
+}
+
+function reRenderEmailList(prop, emails) {
+  const listEl = document.getElementById("emailList");
+  if (!listEl) return;
+  listEl.innerHTML = emails.length === 0
+    ? `<div class="email-empty">No emails archived yet. Tap "Scan emails" to search your inbox.</div>`
+    : emails.map((e, i) => emailCardHtml(e, i, prop.stages)).join("");
+  wireEmailCards(prop, emails);
+}
+
+function showEmailRepliedToast() {
+  const existing = document.getElementById("emailRepliedToast");
+  if (existing) existing.remove();
+  const toast = document.createElement("div");
+  toast.id = "emailRepliedToast";
+  toast.className = "email-replied-toast";
+  toast.textContent = "✓ Email opened in Gmail — marked as replied";
+  document.getElementById("panel").appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add("toast-out");
+    toast.addEventListener("animationend", () => toast.remove(), { once: true });
+  }, 3000);
+}
+
+async function generateAiReply(email, prop) {
+  const settings = await self.TierStorage.getSettings();
+  const apiKey   = settings.anthropicKey;
+  if (!apiKey) throw new Error("No API key");
+
+  const prompt = `You are a professional real estate agent. Write a concise, warm, and professional reply to the following email about the property at ${prop.address}.
+
+Email subject: ${email.subject}
+From: ${email.from}
+Message: ${email.snippet}
+
+Write only the reply body — no subject line, no "Dear Claude", just the email content. Keep it under 150 words. Be helpful and professional.`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 300,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const data = await res.json();
+  return data.content?.[0]?.text || "";
+}
+
+function showAiReplyModal(draft, email, idx, prop, emails) {
+  document.getElementById("aiReplyModal")?.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "aiReplyModal";
+  overlay.className = "etm-overlay";
+  overlay.innerHTML = `
+    <div class="etm-box">
+      <div class="etm-header">
+        <span class="etm-title">AI Draft Reply</span>
+        <button class="etm-close" id="aiReplyClose">✕</button>
+      </div>
+      <div class="etm-body">
+        <div class="ai-reply-to">Replying to: <strong>${escapeHtml(email.from)}</strong></div>
+        <textarea class="ai-reply-textarea" id="aiReplyText">${escapeHtml(draft)}</textarea>
+      </div>
+      <div class="etm-footer">
+        <button class="etm-btn-cancel" id="aiReplyCopy">Copy text</button>
+        <button class="etm-btn-save" id="aiReplyOpen">Open in Gmail</button>
+      </div>
+    </div>`;
+
+  document.getElementById("panel").appendChild(overlay);
+
+  overlay.querySelector("#aiReplyClose").addEventListener("click", () => overlay.remove());
+
+  overlay.querySelector("#aiReplyCopy").addEventListener("click", () => {
+    const text = overlay.querySelector("#aiReplyText").value;
+    navigator.clipboard.writeText(text).then(() => {
+      overlay.querySelector("#aiReplyCopy").textContent = "Copied!";
+      setTimeout(() => { overlay.querySelector("#aiReplyCopy").textContent = "Copy text"; }, 1500);
+    });
+  });
+
+  overlay.querySelector("#aiReplyOpen").addEventListener("click", async () => {
+    const threadId = email.threadId || email.id;
+    chrome.tabs.create({ url: `https://mail.google.com/mail/u/0/#inbox/${threadId}` });
+    email.replied   = true;
+    email.repliedAt = Date.now();
+    email.lastActivity = Date.now();
+    prop.emails = emails;
+    await self.TierStorage.saveProperty(prop);
+    overlay.remove();
+    refreshEmailCard(idx, email, prop, emails);
+    showEmailRepliedToast();
   });
 }
 
@@ -1805,13 +2120,37 @@ function wirePartyRows(prop) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+const STAGE_REMINDER_PRESETS = [
+  { label: "30 min",  mins: 30    },
+  { label: "1 hr",    mins: 60    },
+  { label: "2 hr",    mins: 120   },
+  { label: "4 hr",    mins: 240   },
+  { label: "Daily",   mins: 1440  },
+  { label: "Weekly",  mins: 10080 },
+  { label: "Custom",  mins: null  },
+];
+
 function stageTaskHtml(si, ti, task) {
-  return `<div class="stage-task-row" data-si="${si}" data-ti="${ti}">
-    <label class="stage-task-label">
-      <input type="checkbox" class="stage-task-check" data-si="${si}" data-ti="${ti}" ${task.completed ? "checked" : ""}/>
-      <span class="stage-task-text${task.completed ? " task-text-done" : ""}">${escapeHtml(task.text)}</span>
-    </label>
-    <button class="stage-task-delete" data-si="${si}" data-ti="${ti}" title="Delete task">✕</button>
+  const hasReminder = !!task.reminder;
+  const reminderLabel = hasReminder ? task.reminder.label : "";
+  return `
+  <div class="stage-task-wrap" id="stw-${si}-${ti}">
+    <div class="stage-task-row" data-si="${si}" data-ti="${ti}" draggable="true">
+      <span class="stage-task-drag" title="Drag to reorder">
+        <svg width="10" height="14" viewBox="0 0 10 14" fill="none"><circle cx="3" cy="3" r="1.1" fill="currentColor"/><circle cx="7" cy="3" r="1.1" fill="currentColor"/><circle cx="3" cy="7" r="1.1" fill="currentColor"/><circle cx="7" cy="7" r="1.1" fill="currentColor"/><circle cx="3" cy="11" r="1.1" fill="currentColor"/><circle cx="7" cy="11" r="1.1" fill="currentColor"/></svg>
+      </span>
+      <label class="stage-task-label">
+        <input type="checkbox" class="stage-task-check" data-si="${si}" data-ti="${ti}" ${task.completed ? "checked" : ""}/>
+        <span class="stage-task-text${task.completed ? " task-text-done" : ""}">${escapeHtml(task.text)}</span>
+      </label>
+      <div class="stage-task-actions">
+        ${hasReminder ? `<span class="str-badge" data-si="${si}" data-ti="${ti}" title="Edit reminder">${escapeHtml(reminderLabel)}</span>` : ""}
+        <button class="str-clock-btn" data-si="${si}" data-ti="${ti}" title="${hasReminder ? "Edit reminder" : "Set reminder"}">
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.2"/><path d="M6 4V6.5L7.5 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        </button>
+        <button class="stage-task-delete" data-si="${si}" data-ti="${ti}" title="Delete task">✕</button>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -1826,6 +2165,177 @@ function wireStageTaskEvents(prop) {
     const ti = parseInt(btn.dataset.ti);
     wireTaskDelete(btn, prop, si, ti);
   });
+  bodyEl.querySelectorAll(".str-clock-btn, .str-badge").forEach((btn) => {
+    const si = parseInt(btn.dataset.si);
+    const ti = parseInt(btn.dataset.ti);
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleStageTaskReminderPanel(si, ti, prop);
+    });
+  });
+  prop.stages.forEach((_, si) => {
+    const listEl = document.getElementById(`stl-${si}`);
+    if (listEl) wireStageTaskDrag(listEl, prop, si);
+  });
+}
+
+function toggleStageTaskReminderPanel(si, ti, prop) {
+  const wrap     = document.getElementById(`stw-${si}-${ti}`);
+  if (!wrap) return;
+  const existing = wrap.querySelector(".str-panel");
+  if (existing) { existing.remove(); return; }
+
+  const task    = prop.stages[si].tasks[ti];
+  const current = task.reminder;
+  const activeLabel = current?.label || "1 hr";
+
+  const panel = document.createElement("div");
+  panel.className = "str-panel";
+  panel.innerHTML = `
+    <div class="str-panel-inner">
+      <div class="str-panel-top">
+        <span class="str-panel-title">Reminder</span>
+        <label class="reminder-toggle-wrap">
+          <input type="checkbox" class="str-toggle" ${current ? "checked" : ""} />
+          <span class="reminder-toggle-track"><span class="reminder-toggle-thumb"></span></span>
+        </label>
+      </div>
+      <div class="str-panel-body" style="display:${current ? "block" : "none"}">
+        <div class="str-presets">
+          ${STAGE_REMINDER_PRESETS.map(p =>
+            `<button class="rp-btn str-preset${p.label === activeLabel && current ? " rp-active" : ""}" data-mins="${p.mins ?? ""}" data-label="${p.label}">${p.label}</button>`
+          ).join("")}
+        </div>
+        <div class="reminder-custom-row str-custom-row" style="display:${activeLabel === "Custom" && current ? "flex" : "none"}">
+          <span class="reminder-custom-label">Every</span>
+          <input type="number" class="reminder-custom-num str-custom-num" value="${current?.customVal || 1}" min="1" max="999" />
+          <select class="reminder-custom-unit str-custom-unit">
+            <option value="minutes" ${current?.unit === "minutes" ? "selected" : ""}>minutes</option>
+            <option value="hours"   ${current?.unit === "hours"   ? "selected" : ""}>hours</option>
+            <option value="days"    ${current?.unit === "days"    ? "selected" : ""}>days</option>
+          </select>
+        </div>
+        <div class="reminder-time-row str-time-row" style="display:${current?.intervalMins >= 1440 ? "flex" : "none"}">
+          <span class="reminder-custom-label">At</span>
+          <input type="time" class="reminder-time-input str-time-input" value="${current?.time || "09:00"}" />
+        </div>
+      </div>
+      <div class="str-panel-footer">
+        <button class="str-cancel">Cancel</button>
+        <button class="str-save">Save</button>
+      </div>
+    </div>`;
+
+  wrap.appendChild(panel);
+
+  const toggle   = panel.querySelector(".str-toggle");
+  const body     = panel.querySelector(".str-panel-body");
+  const presets  = panel.querySelectorAll(".str-preset");
+  const customRow = panel.querySelector(".str-custom-row");
+  const timeRow  = panel.querySelector(".str-time-row");
+
+  toggle.addEventListener("change", () => {
+    body.style.display = toggle.checked ? "block" : "none";
+  });
+
+  presets.forEach(btn => {
+    btn.addEventListener("click", () => {
+      presets.forEach(b => b.classList.remove("rp-active"));
+      btn.classList.add("rp-active");
+      const isCustom = btn.dataset.label === "Custom";
+      const isLong   = !isCustom && Number(btn.dataset.mins) >= 1440;
+      customRow.style.display = isCustom ? "flex" : "none";
+      timeRow.style.display   = isLong   ? "flex" : "none";
+    });
+  });
+
+  panel.querySelector(".str-cancel").addEventListener("click", () => panel.remove());
+
+  panel.querySelector(".str-save").addEventListener("click", async () => {
+    if (!toggle.checked) {
+      prop.stages[si].tasks[ti].reminder = null;
+    } else {
+      const activeBtn  = panel.querySelector(".str-preset.rp-active");
+      const label      = activeBtn?.dataset.label || "1 hr";
+      const presetMins = activeBtn?.dataset.mins ? Number(activeBtn.dataset.mins) : null;
+      let intervalMins = presetMins;
+
+      if (label === "Custom" || !presetMins) {
+        const val  = parseInt(panel.querySelector(".str-custom-num")?.value || "1");
+        const unit = panel.querySelector(".str-custom-unit")?.value || "hours";
+        intervalMins = unit === "minutes" ? val : unit === "hours" ? val * 60 : val * 1440;
+      }
+
+      const time = panel.querySelector(".str-time-input")?.value || "09:00";
+      prop.stages[si].tasks[ti].reminder = {
+        intervalMins,
+        label,
+        unit:      label === "Custom" ? (panel.querySelector(".str-custom-unit")?.value || "hours") : null,
+        customVal: label === "Custom" ? parseInt(panel.querySelector(".str-custom-num")?.value || "1") : null,
+        time,
+        nextAt: Date.now() + intervalMins * 60 * 1000,
+      };
+    }
+
+    await self.TierStorage.saveProperty(prop);
+
+    // Re-render just this task row
+    const listEl = document.getElementById(`stl-${si}`);
+    if (listEl) {
+      listEl.innerHTML = prop.stages[si].tasks.map((t, i) => stageTaskHtml(si, i, t)).join("");
+      wireStageTaskEvents(prop);
+    }
+  });
+}
+
+function wireStageTaskDrag(listEl, prop, si) {
+  let dragSrc = null;
+
+  listEl.querySelectorAll(".stage-task-wrap").forEach((wrap) => {
+    const row = wrap.querySelector(".stage-task-row");
+    if (!row) return;
+
+    row.addEventListener("dragstart", (e) => {
+      dragSrc = wrap;
+      wrap.classList.add("drag-dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", row.dataset.ti);
+    });
+
+    row.addEventListener("dragend", () => {
+      wrap.classList.remove("drag-dragging");
+      listEl.querySelectorAll(".stage-task-wrap").forEach(w => w.classList.remove("drag-over"));
+    });
+
+    row.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (wrap === dragSrc) return;
+      listEl.querySelectorAll(".stage-task-wrap").forEach(w => w.classList.remove("drag-over"));
+      wrap.classList.add("drag-over");
+    });
+
+    row.addEventListener("dragleave", () => wrap.classList.remove("drag-over"));
+
+    row.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      if (!dragSrc || dragSrc === wrap) return;
+      wrap.classList.remove("drag-over");
+
+      const fromIdx = parseInt(dragSrc.querySelector(".stage-task-row").dataset.ti);
+      const toIdx   = parseInt(row.dataset.ti);
+
+      const tasks = prop.stages[si].tasks;
+      const [moved] = tasks.splice(fromIdx, 1);
+      tasks.splice(toIdx, 0, moved);
+
+      await self.TierStorage.saveProperty(prop);
+
+      listEl.innerHTML = tasks.map((t, i) => stageTaskHtml(si, i, t)).join("");
+      wireStageTaskEvents(prop);
+      refreshTaskCount(si, prop.stages[si]);
+    });
+  });
 }
 
 function wireOneTaskRow(row, prop, si, ti) {
@@ -1838,6 +2348,7 @@ function wireOneTaskRow(row, prop, si, ti) {
     refreshTaskCount(si, prop.stages[si]);
     refreshStageNum(si, prop.stages[si]);
     updateOverallBar(prop);
+    refreshStageNotifDot(si, prop.stages[si]);
   });
 }
 
@@ -1855,10 +2366,35 @@ function wireTaskDelete(btn, prop, si, ti) {
     listEl.querySelectorAll(".stage-task-delete").forEach((b) => {
       wireTaskDelete(b, prop, si, parseInt(b.dataset.ti));
     });
+    wireStageTaskDrag(listEl, prop, si);
     refreshTaskCount(si, prop.stages[si]);
     refreshStageNum(si, prop.stages[si]);
     updateOverallBar(prop);
   });
+}
+
+function refreshStageNotifDot(si, stage) {
+  let dot = document.getElementById(`snd-${si}`);
+
+  const emailTasks = stage.tasks.filter(t => t.fromEmail);
+  const hasNew     = emailTasks.some(t => t.isNew && !t.completed);
+  const allDone    = emailTasks.length > 0 && emailTasks.every(t => t.completed);
+
+  if (!hasNew && !allDone) {
+    if (dot) dot.remove();
+    return;
+  }
+
+  const nameRow = document.querySelector(`#sc-${si} .stage-name-row`);
+  if (!nameRow) return;
+
+  if (!dot) {
+    dot = document.createElement("span");
+    dot.id = `snd-${si}`;
+    nameRow.appendChild(dot);
+  }
+  dot.className = `stage-notif-dot ${allDone ? "stage-notif-done" : "stage-notif-new"}`;
+  dot.textContent = allDone ? "✓" : "!";
 }
 
 function refreshTaskCount(si, stage) {

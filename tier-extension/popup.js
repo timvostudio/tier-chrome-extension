@@ -1951,17 +1951,12 @@ async function renderPropertyEmails(propId) {
         <span class="modal-title">Inbox</span>
       </div>
 
-      <!-- Hero: property image -->
+      <!-- Hero: identical position/size to escrow tracker -->
       ${prop.photoUrl ? `
-        <div class="eap-hero-img-wrap">
-          <img class="eap-hero-img" src="${escapeHtml(prop.photoUrl)}" alt="${escapeHtml(prop.address)}" />
-          <div class="eap-hero-gradient"></div>
+        <div class="prop-detail-hero">
+          <img class="prop-detail-hero-img" src="${escapeHtml(prop.photoUrl)}" alt="${escapeHtml(prop.address)}" />
         </div>
-      ` : `
-        <div class="eap-hero-placeholder">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M2 7.5L12 13L22 7.5" stroke="currentColor" stroke-width="1.2"/></svg>
-        </div>
-      `}
+      ` : ""}
 
       <!-- Address + stats card -->
       <div class="eap-addr-card">

@@ -107,6 +107,23 @@ async function showA11yPanel() {
           </div>
         </div>
 
+        <div class="a11y-section">
+          <div class="a11y-section-label">Window size</div>
+          <div class="a11y-win-row" id="a11yWinRow">
+            ${await (async () => {
+              const cur = await loadWinSize();
+              return WIN_PRESETS.map(p => {
+                const active = (cur.w === p.w && cur.h === p.h);
+                return `<button class="a11y-win-btn${active ? " a11y-active" : ""}" data-w="${p.w}" data-h="${p.h}">
+                  <span class="a11y-win-icon">${p.key === "compact" ? "▫" : p.key === "default" ? "◻" : p.key === "large" ? "▢" : "⬜"}</span>
+                  <span>${p.label}</span>
+                  <span class="a11y-win-dims">${p.w}×${p.h}</span>
+                </button>`;
+              }).join("");
+            })()}
+          </div>
+        </div>
+
         <div class="a11y-divider"></div>
 
         <div class="a11y-toggle-item">
@@ -196,6 +213,18 @@ async function showA11yPanel() {
     });
   });
 
+  // Window size presets
+  sheet.querySelectorAll(".a11y-win-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const w = parseInt(btn.dataset.w);
+      const h = parseInt(btn.dataset.h);
+      sheet.querySelectorAll(".a11y-win-btn").forEach(b => b.classList.remove("a11y-active"));
+      btn.classList.add("a11y-active");
+      applyWinSize(w, h);
+      await saveWinSize(w, h);
+    });
+  });
+
   // Toggles
   document.getElementById("a11yBold").addEventListener("change", async e => {
     const cur = await loadA11y(); cur.bold = e.target.checked; await saveA11y(cur); apply();
@@ -210,13 +239,82 @@ async function showA11yPanel() {
   // Reset
   document.getElementById("a11yReset").addEventListener("click", async () => {
     await saveA11y({ ...A11Y_DEFAULTS });
+    await saveWinSize(360, 560);
     applyA11y(A11Y_DEFAULTS);
+    applyWinSize(360, 560);
     close();
     showA11yPanel();
   });
 }
 
 a11yBtn.addEventListener("click", showA11yPanel);
+
+// ── Window size / resize ──────────────────────────────────────────────────────
+
+const WIN_KEY = "tier_win_size";
+const WIN_PRESETS = [
+  { key: "compact", label: "Compact",  w: 300, h: 480 },
+  { key: "default", label: "Default",  w: 360, h: 560 },
+  { key: "large",   label: "Large",    w: 460, h: 640 },
+  { key: "wide",    label: "Wide",     w: 580, h: 660 },
+];
+
+async function loadWinSize() {
+  const r = await chrome.storage.local.get(WIN_KEY);
+  return r[WIN_KEY] || { w: 360, h: 560 };
+}
+
+async function saveWinSize(w, h) {
+  await chrome.storage.local.set({ [WIN_KEY]: { w, h } });
+}
+
+function applyWinSize(w, h) {
+  const panel = document.getElementById("panel");
+  if (!panel) return;
+  panel.style.width     = w + "px";
+  panel.style.maxHeight = h + "px";
+  document.body.style.width    = w + "px";
+  document.body.style.minWidth = w + "px";
+}
+
+function wireResizeHandle() {
+  const handle = document.getElementById("resizeHandle");
+  const panel  = document.getElementById("panel");
+  if (!handle || !panel) return;
+
+  let startX, startY, startW, startH, dragging = false;
+
+  handle.addEventListener("mousedown", e => {
+    e.preventDefault();
+    dragging = true;
+    startX = e.screenX;
+    startY = e.screenY;
+    startW = panel.offsetWidth;
+    startH = panel.offsetHeight;
+    handle.classList.add("resize-active");
+
+    const onMove = e => {
+      if (!dragging) return;
+      const w = Math.min(800, Math.max(280, startW + (e.screenX - startX)));
+      const h = Math.min(720, Math.max(380, startH + (e.screenY - startY)));
+      applyWinSize(w, h);
+    };
+
+    const onUp = async e => {
+      dragging = false;
+      handle.classList.remove("resize-active");
+      const w = Math.min(800, Math.max(280, startW + (e.screenX - startX)));
+      const h = Math.min(720, Math.max(380, startH + (e.screenY - startY)));
+      applyWinSize(w, h);
+      await saveWinSize(w, h);
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup",   onUp);
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup",   onUp);
+  });
+}
 
 const TIER_ORDER = ["red", "yellow", "green"];
 const TIER_META = {
@@ -479,9 +577,11 @@ async function speakWelcome() {
 }
 
 async function init() {
-  // Apply saved display preferences before first render
-  const a11y = await loadA11y();
+  // Apply saved display preferences and window size before first render
+  const [a11y, winSize] = await Promise.all([loadA11y(), loadWinSize()]);
   applyA11y(a11y);
+  applyWinSize(winSize.w, winSize.h);
+  wireResizeHandle();
 
   const authState = await self.TierStorage.getAuthState();
   const tasks = await self.TierStorage.getTasks();

@@ -1531,8 +1531,13 @@ function emailCardHtml(email, idx, stages) {
         </div>
       </div>
 
-      <!-- Snippet -->
-      ${email.snippet ? `<div class="ec-snippet">${escapeHtml(email.snippet)}</div>` : ""}
+      <!-- Snippet (collapsed by default, tap to expand) -->
+      ${email.snippet ? `
+        <div class="ec-snippet-wrap" data-expanded="false">
+          <div class="ec-snippet">${escapeHtml(email.snippet)}</div>
+          <button class="ec-snippet-toggle">Show more</button>
+        </div>
+      ` : ""}
 
       <!-- Stale warning -->
       ${isStale ? `
@@ -1741,6 +1746,17 @@ function showAddTaskModal(email, suggestedIdx, prop, emails, onSave) {
 }
 
 function wireEmailCards(prop, emails) {
+  // Snippet expand/collapse
+  document.querySelectorAll(".ec-snippet-wrap").forEach(wrap => {
+    const toggle = wrap.querySelector(".ec-snippet-toggle");
+    if (!toggle) return;
+    toggle.addEventListener("click", () => {
+      const expanded = wrap.dataset.expanded === "true";
+      wrap.dataset.expanded = expanded ? "false" : "true";
+      toggle.textContent = expanded ? "Show more" : "Show less";
+    });
+  });
+
   // Add task
   document.querySelectorAll(".email-confirm-btn").forEach(btn => {
     btn.addEventListener("click", () => {

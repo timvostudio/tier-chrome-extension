@@ -1936,40 +1936,67 @@ async function renderPropertyEmails(propId) {
     wireEmailCards(prop, emails);
   }
 
-  const scanIcon = `<svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M12.5 7A5.5 5.5 0 1 1 10.6 3M12.5 1.5V4.5H9.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const scanIcon    = `<svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M12.5 7A5.5 5.5 0 1 1 10.6 3M12.5 1.5V4.5H9.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   const emailCount  = (prop.emails || []).length;
-  const shortAddr   = prop.address?.split(",").slice(0, 2).join(",") || prop.address || "Property";
   const unreplied   = (prop.emails || []).filter(e => !e.replied && !e.taskAdded).length;
+  const addrLine1   = prop.address?.split(",")[0]?.trim() || prop.address || "Property";
+  const addrLine2   = prop.address?.split(",").slice(1).join(",").trim() || "";
 
   bodyEl.innerHTML = `
-    <div class="modal-header">
-      <button class="back-btn" id="emailBackBtn">&larr; Back</button>
-      <span class="modal-title">Inbox</span>
-    </div>
+    <div class="eap-wrap">
 
-    <div class="ea-hero">
-      <div class="ea-hero-icon">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3" width="13" height="10" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M1.5 5.5L8 9.5L14.5 5.5" stroke="currentColor" stroke-width="1.2"/></svg>
+      <!-- Back button floats over hero -->
+      <div class="eap-topbar">
+        <button class="eap-back-btn" id="emailBackBtn">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8L10 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <span class="eap-topbar-title">Inbox</span>
+        <div style="width:32px"></div>
       </div>
-      <div class="ea-hero-info">
-        <div class="ea-hero-addr">${escapeHtml(shortAddr)}</div>
-        <div class="ea-hero-stats">
-          <span class="ea-hero-count" id="emailCountBadge">${emailCount} email${emailCount !== 1 ? "s" : ""}</span>
-          ${unreplied > 0 ? `<span class="ea-hero-unreplied">${unreplied} pending</span>` : ""}
-          <span class="ea-scan-status" id="emailScanStatus"></span>
+
+      <!-- Hero: property image -->
+      ${prop.photoUrl ? `
+        <div class="eap-hero-img-wrap">
+          <img class="eap-hero-img" src="${escapeHtml(prop.photoUrl)}" alt="${escapeHtml(prop.address)}" />
+          <div class="eap-hero-gradient"></div>
         </div>
-      </div>
-      <button class="ea-scan-btn" id="emailScanBtn">${scanIcon} Scan</button>
-    </div>
+      ` : `
+        <div class="eap-hero-placeholder">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M2 7.5L12 13L22 7.5" stroke="currentColor" stroke-width="1.2"/></svg>
+        </div>
+      `}
 
-    <div id="emailList" class="ea-list">
-      ${emailCount === 0
-        ? `<div class="ea-empty">
-             <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M2 7.5L12 13L22 7.5" stroke="currentColor" stroke-width="1.2"/></svg>
-             <div class="ea-empty-title">No emails yet</div>
-             <div class="ea-empty-sub">Tap Scan to check your inbox</div>
-           </div>`
-        : (prop.emails || []).map((e, i) => emailCardHtml(e, i, prop.stages)).join("")}
+      <!-- Address + stats card -->
+      <div class="eap-addr-card">
+        <div class="eap-addr-left">
+          <div class="eap-addr-line1">${escapeHtml(addrLine1)}</div>
+          ${addrLine2 ? `<div class="eap-addr-line2">${escapeHtml(addrLine2)}</div>` : ""}
+          <div class="eap-addr-chips">
+            <span class="eap-chip-count" id="emailCountBadge">${emailCount} email${emailCount !== 1 ? "s" : ""}</span>
+            ${unreplied > 0 ? `<span class="eap-chip-pending">${unreplied} pending</span>` : `<span class="eap-chip-ok">All clear</span>`}
+            <span class="eap-scan-status" id="emailScanStatus"></span>
+          </div>
+        </div>
+        <button class="eap-scan-btn" id="emailScanBtn">${scanIcon} Scan</button>
+      </div>
+
+      <!-- Section label -->
+      <div class="eap-section-label">
+        <span>Messages</span>
+        <span class="eap-section-count">${emailCount > 0 ? emailCount : ""}</span>
+      </div>
+
+      <!-- Email list -->
+      <div id="emailList" class="ea-list">
+        ${emailCount === 0
+          ? `<div class="ea-empty">
+               <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M2 7.5L12 13L22 7.5" stroke="currentColor" stroke-width="1.2"/></svg>
+               <div class="ea-empty-title">No emails yet</div>
+               <div class="ea-empty-sub">Tap Scan to check your inbox</div>
+             </div>`
+          : (prop.emails || []).map((e, i) => emailCardHtml(e, i, prop.stages)).join("")}
+      </div>
+
     </div>`;
 
   document.getElementById("emailBackBtn").addEventListener("click", () => renderPropertyDetail(propId));
@@ -1987,7 +2014,7 @@ async function renderPropertyEmails(propId) {
         if (!prop.emails) prop.emails = [];
         prop.emails.unshift(...newEmails);
         await self.TierStorage.saveProperty(prop);
-        if (status) { status.textContent = `+${newEmails.length} new`; status.classList.add("ea-status-new"); }
+        if (status) { status.textContent = `+${newEmails.length} new`; status.classList.add("ea-status-new"); status.classList.add("eap-scan-status"); }
         if (countBadge) countBadge.textContent = `${prop.emails.length} email${prop.emails.length !== 1 ? "s" : ""}`;
       } else {
         if (status && !silent) status.textContent = "Up to date";

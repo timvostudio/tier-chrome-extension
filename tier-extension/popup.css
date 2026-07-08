@@ -2753,3 +2753,241 @@ body {
   opacity: 0.9;
 }
 .tcp-btn-delete:hover { opacity: 1; }
+
+/* ── Accessibility "Aa" button ──────────────────────────────────────────────── */
+.a11y-icon-btn { font-size: 11px; font-weight: 700; letter-spacing: 0.02em; }
+.a11y-btn-label { color: #fff; font-size: 11px; font-weight: 700; line-height: 1; }
+
+/* ── Accessibility sheet overlay ────────────────────────────────────────────── */
+.a11y-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.42);
+  z-index: 500;
+  display: flex;
+  align-items: flex-end;
+  animation: a11yFadeIn 130ms ease;
+}
+@keyframes a11yFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.a11y-sheet {
+  width: 100%;
+  background: var(--bg-primary);
+  border-radius: 16px 16px 0 0;
+  overflow: hidden;
+  animation: a11ySlideUp 160ms cubic-bezier(.22,.68,0,1.2);
+  max-height: 92%;
+  display: flex;
+  flex-direction: column;
+}
+@keyframes a11ySlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+.a11y-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.a11y-sheet-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.a11y-close {
+  background: var(--bg-hover);
+  border: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.a11y-close:hover { color: var(--text-primary); }
+
+.a11y-body {
+  padding: 12px 16px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.a11y-section { display: flex; flex-direction: column; gap: 8px; }
+
+.a11y-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+/* Font size buttons */
+.a11y-size-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.a11y-size-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 4px 8px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 100ms, background 100ms;
+}
+.a11y-size-btn:hover { background: var(--bg-hover); }
+.a11y-size-btn.a11y-active {
+  border-color: var(--text-primary);
+  background: var(--text-primary);
+}
+.a11y-size-btn.a11y-active .a11y-size-preview,
+.a11y-size-btn.a11y-active .a11y-size-label { color: #fff; }
+
+.a11y-size-preview { font-weight: 700; color: var(--text-primary); line-height: 1; }
+.a11y-size-small   { font-size: 11px; }
+.a11y-size-normal  { font-size: 14px; }
+.a11y-size-large   { font-size: 17px; }
+.a11y-size-xl      { font-size: 20px; }
+
+.a11y-size-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Pill buttons (theme, font) */
+.a11y-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.a11y-pill {
+  padding: 7px 13px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 100ms, background 100ms, color 100ms;
+  white-space: nowrap;
+}
+.a11y-pill:hover { background: var(--bg-hover); color: var(--text-primary); }
+.a11y-pill.a11y-active {
+  border-color: var(--text-primary);
+  background: var(--text-primary);
+  color: #fff;
+}
+
+/* Divider */
+.a11y-divider { height: 1px; background: var(--border); }
+
+/* Toggle items */
+.a11y-toggle-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.a11y-toggle-info { flex: 1; min-width: 0; }
+
+.a11y-toggle-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.a11y-toggle-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Reset button */
+.a11y-reset {
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 100ms, color 100ms;
+  margin-top: 4px;
+}
+.a11y-reset:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* ── Theme overrides (applied to #panel via data-theme) ─────────────────────── */
+
+#panel[data-theme="dark"] {
+  --bg-primary:    #1c1c1e;
+  --bg-secondary:  #2c2c2e;
+  --bg-card:       #3a3a3c;
+  --bg-hover:      #48484a;
+  --border:        #3a3a3c;
+  --border-light:  #48484a;
+  --text-primary:  #f2f2f7;
+  --text-secondary:#aeaeb2;
+  --text-muted:    #8e8e93;
+  background: #1c1c1e;
+}
+#panel[data-theme="dark"] .header { background: #000; border-bottom-color: #3a3a3c; }
+#panel[data-theme="dark"] body,
+#panel[data-theme="dark"] .panel { background: #1c1c1e; }
+
+#panel[data-theme="hc"] {
+  --bg-primary:    #ffffff;
+  --bg-secondary:  #f0f0f0;
+  --bg-card:       #e8e8e8;
+  --bg-hover:      #d8d8d8;
+  --border:        #555555;
+  --border-light:  #333333;
+  --text-primary:  #000000;
+  --text-secondary:#1a1a1a;
+  --text-muted:    #333333;
+  --accent-red:    #cc0000;
+  --accent-green:  #007700;
+  --accent-yellow: #996600;
+}
+#panel[data-theme="hc"] .header { background: #000; }
+#panel[data-theme="hc"] .icon-btn { outline: 1px solid rgba(255,255,255,0.3); }
+
+/* ── Spacing override ────────────────────────────────────────────────────────── */
+#panel[data-spacing="comfortable"] .task-card       { padding: 14px 16px; }
+#panel[data-spacing="comfortable"] .stage-task-row  { padding: 8px 0; }
+#panel[data-spacing="comfortable"] .email-card .ec-head { padding: 14px 14px 10px; }
+#panel[data-spacing="comfortable"] .ec-snippet-wrap { padding: 0 14px 10px; }
+#panel[data-spacing="comfortable"] .ec-footer       { padding: 12px 14px; }
+
+/* ── Reduce motion ───────────────────────────────────────────────────────────── */
+#panel[data-reduce-motion="true"] *,
+#panel[data-reduce-motion="true"] *::before,
+#panel[data-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  transition-duration: 0.01ms !important;
+}

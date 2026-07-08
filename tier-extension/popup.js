@@ -7,6 +7,216 @@ const syncIconWrap = syncBtn;
 const addBtn = document.getElementById("addBtn");
 const settingsBtn = document.getElementById("settingsBtn");
 const calendarBtn = document.getElementById("calendarBtn");
+const a11yBtn = document.getElementById("a11yBtn");
+
+// ── Accessibility / Display Settings ─────────────────────────────────────────
+
+const A11Y_KEY = "tier_a11y";
+const A11Y_DEFAULTS = {
+  fontSize:     "normal",   // small | normal | large | xl
+  theme:        "light",    // light | dark | hc
+  fontStyle:    "system",   // system | serif | readable
+  bold:         false,
+  spacing:      false,      // comfortable line-height
+  reduceMotion: false,
+};
+
+const A11Y_ZOOM = { small: 0.88, normal: 1.0, large: 1.14, xl: 1.30 };
+const A11Y_FONTS = {
+  system:   '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif',
+  serif:    'Georgia, "Times New Roman", serif',
+  readable: '"Arial", "Helvetica Neue", Arial, sans-serif',
+};
+
+async function loadA11y() {
+  const res = await chrome.storage.local.get(A11Y_KEY);
+  return Object.assign({}, A11Y_DEFAULTS, res[A11Y_KEY] || {});
+}
+
+async function saveA11y(settings) {
+  await chrome.storage.local.set({ [A11Y_KEY]: settings });
+}
+
+function applyA11y(s) {
+  const panel = document.getElementById("panel");
+  if (!panel) return;
+  document.body.style.zoom       = A11Y_ZOOM[s.fontSize] ?? 1;
+  document.body.style.fontFamily = A11Y_FONTS[s.fontStyle] || A11Y_FONTS.system;
+  document.body.style.fontWeight = s.bold ? "600" : "";
+  panel.dataset.theme            = s.theme || "light";
+  panel.dataset.spacing          = s.spacing ? "comfortable" : "normal";
+  panel.dataset.reduceMotion     = s.reduceMotion ? "true" : "false";
+}
+
+async function showA11yPanel() {
+  document.getElementById("a11ySheet")?.remove();
+  const s = await loadA11y();
+
+  const sizes = [
+    { key: "small",  label: "Small",   preview: "A" },
+    { key: "normal", label: "Medium",  preview: "A" },
+    { key: "large",  label: "Large",   preview: "A" },
+    { key: "xl",     label: "X-Large", preview: "A" },
+  ];
+  const themes = [
+    { key: "light", label: "Light" },
+    { key: "dark",  label: "Dark"  },
+    { key: "hc",    label: "High Contrast" },
+  ];
+  const fonts = [
+    { key: "system",   label: "Default" },
+    { key: "serif",    label: "Serif"   },
+    { key: "readable", label: "Clean"   },
+  ];
+
+  const sheet = document.createElement("div");
+  sheet.id = "a11ySheet";
+  sheet.className = "a11y-overlay";
+  sheet.innerHTML = `
+    <div class="a11y-sheet" id="a11ySheetInner">
+      <div class="a11y-sheet-header">
+        <span class="a11y-sheet-title">Display &amp; Accessibility</span>
+        <button class="a11y-close" id="a11yClose">✕</button>
+      </div>
+      <div class="a11y-body">
+
+        <div class="a11y-section">
+          <div class="a11y-section-label">Text size</div>
+          <div class="a11y-size-row">
+            ${sizes.map(sz => `
+              <button class="a11y-size-btn${s.fontSize === sz.key ? " a11y-active" : ""}" data-size="${sz.key}">
+                <span class="a11y-size-preview a11y-size-${sz.key}">${sz.preview}</span>
+                <span class="a11y-size-label">${sz.label}</span>
+              </button>`).join("")}
+          </div>
+        </div>
+
+        <div class="a11y-section">
+          <div class="a11y-section-label">Theme</div>
+          <div class="a11y-pill-row">
+            ${themes.map(t => `
+              <button class="a11y-pill${s.theme === t.key ? " a11y-active" : ""}" data-theme="${t.key}">${t.label}</button>`).join("")}
+          </div>
+        </div>
+
+        <div class="a11y-section">
+          <div class="a11y-section-label">Font style</div>
+          <div class="a11y-pill-row">
+            ${fonts.map(f => `
+              <button class="a11y-pill${s.fontStyle === f.key ? " a11y-active" : ""}" data-font="${f.key}">${f.label}</button>`).join("")}
+          </div>
+        </div>
+
+        <div class="a11y-divider"></div>
+
+        <div class="a11y-toggle-item">
+          <div class="a11y-toggle-info">
+            <div class="a11y-toggle-name">Bold text</div>
+            <div class="a11y-toggle-desc">Thicker letters throughout the app</div>
+          </div>
+          <label class="reminder-toggle-wrap">
+            <input type="checkbox" id="a11yBold" ${s.bold ? "checked" : ""} />
+            <span class="reminder-toggle-track"><span class="reminder-toggle-thumb"></span></span>
+          </label>
+        </div>
+
+        <div class="a11y-toggle-item">
+          <div class="a11y-toggle-info">
+            <div class="a11y-toggle-name">Comfortable spacing</div>
+            <div class="a11y-toggle-desc">Extra breathing room between lines</div>
+          </div>
+          <label class="reminder-toggle-wrap">
+            <input type="checkbox" id="a11ySpacing" ${s.spacing ? "checked" : ""} />
+            <span class="reminder-toggle-track"><span class="reminder-toggle-thumb"></span></span>
+          </label>
+        </div>
+
+        <div class="a11y-toggle-item">
+          <div class="a11y-toggle-info">
+            <div class="a11y-toggle-name">Reduce motion</div>
+            <div class="a11y-toggle-desc">Turn off slide and fade animations</div>
+          </div>
+          <label class="reminder-toggle-wrap">
+            <input type="checkbox" id="a11yMotion" ${s.reduceMotion ? "checked" : ""} />
+            <span class="reminder-toggle-track"><span class="reminder-toggle-thumb"></span></span>
+          </label>
+        </div>
+
+        <button class="a11y-reset" id="a11yReset">Reset to defaults</button>
+
+      </div>
+    </div>`;
+
+  document.getElementById("panel").appendChild(sheet);
+
+  // Close
+  const close = () => sheet.remove();
+  document.getElementById("a11yClose").addEventListener("click", close);
+  sheet.addEventListener("click", e => { if (e.target === sheet) close(); });
+
+  // Live-apply helper
+  async function apply() {
+    const cur = await loadA11y();
+    applyA11y(cur);
+  }
+
+  // Font size pills
+  sheet.querySelectorAll(".a11y-size-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      sheet.querySelectorAll(".a11y-size-btn").forEach(b => b.classList.remove("a11y-active"));
+      btn.classList.add("a11y-active");
+      const cur = await loadA11y();
+      cur.fontSize = btn.dataset.size;
+      await saveA11y(cur);
+      apply();
+    });
+  });
+
+  // Theme pills
+  sheet.querySelectorAll("[data-theme]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      sheet.querySelectorAll("[data-theme]").forEach(b => b.classList.remove("a11y-active"));
+      btn.classList.add("a11y-active");
+      const cur = await loadA11y();
+      cur.theme = btn.dataset.theme;
+      await saveA11y(cur);
+      apply();
+    });
+  });
+
+  // Font pills
+  sheet.querySelectorAll("[data-font]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      sheet.querySelectorAll("[data-font]").forEach(b => b.classList.remove("a11y-active"));
+      btn.classList.add("a11y-active");
+      const cur = await loadA11y();
+      cur.fontStyle = btn.dataset.font;
+      await saveA11y(cur);
+      apply();
+    });
+  });
+
+  // Toggles
+  document.getElementById("a11yBold").addEventListener("change", async e => {
+    const cur = await loadA11y(); cur.bold = e.target.checked; await saveA11y(cur); apply();
+  });
+  document.getElementById("a11ySpacing").addEventListener("change", async e => {
+    const cur = await loadA11y(); cur.spacing = e.target.checked; await saveA11y(cur); apply();
+  });
+  document.getElementById("a11yMotion").addEventListener("change", async e => {
+    const cur = await loadA11y(); cur.reduceMotion = e.target.checked; await saveA11y(cur); apply();
+  });
+
+  // Reset
+  document.getElementById("a11yReset").addEventListener("click", async () => {
+    await saveA11y({ ...A11Y_DEFAULTS });
+    applyA11y(A11Y_DEFAULTS);
+    close();
+    showA11yPanel();
+  });
+}
+
+a11yBtn.addEventListener("click", showA11yPanel);
 
 const TIER_ORDER = ["red", "yellow", "green"];
 const TIER_META = {
@@ -269,6 +479,10 @@ async function speakWelcome() {
 }
 
 async function init() {
+  // Apply saved display preferences before first render
+  const a11y = await loadA11y();
+  applyA11y(a11y);
+
   const authState = await self.TierStorage.getAuthState();
   const tasks = await self.TierStorage.getTasks();
   if (!authState.connected && tasks.length === 0) {

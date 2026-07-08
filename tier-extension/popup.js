@@ -1945,13 +1945,10 @@ async function renderPropertyEmails(propId) {
   bodyEl.innerHTML = `
     <div class="eap-wrap">
 
-      <!-- Back button floats over hero -->
-      <div class="eap-topbar">
-        <button class="eap-back-btn" id="emailBackBtn">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8L10 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <span class="eap-topbar-title">Inbox</span>
-        <div style="width:32px"></div>
+      <!-- Header: matches escrow tracker style -->
+      <div class="modal-header">
+        <button class="back-btn" id="emailBackBtn">&larr; Back</button>
+        <span class="modal-title">Inbox</span>
       </div>
 
       <!-- Hero: property image -->

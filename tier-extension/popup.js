@@ -1939,8 +1939,6 @@ async function renderPropertyEmails(propId) {
   const scanIcon    = `<svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M12.5 7A5.5 5.5 0 1 1 10.6 3M12.5 1.5V4.5H9.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   const emailCount  = (prop.emails || []).length;
   const unreplied   = (prop.emails || []).filter(e => !e.replied && !e.taskAdded).length;
-  const addrLine1   = prop.address?.split(",")[0]?.trim() || prop.address || "Property";
-  const addrLine2   = prop.address?.split(",").slice(1).join(",").trim() || "";
 
   bodyEl.innerHTML = `
     <div class="eap-wrap">
@@ -1958,18 +1956,17 @@ async function renderPropertyEmails(propId) {
         </div>
       ` : ""}
 
-      <!-- Address + stats card -->
-      <div class="eap-addr-card">
-        <div class="eap-addr-left">
-          <div class="eap-addr-line1">${escapeHtml(addrLine1)}</div>
-          ${addrLine2 ? `<div class="eap-addr-line2">${escapeHtml(addrLine2)}</div>` : ""}
-          <div class="eap-addr-chips">
-            <span class="eap-chip-count" id="emailCountBadge">${emailCount} email${emailCount !== 1 ? "s" : ""}</span>
-            ${unreplied > 0 ? `<span class="eap-chip-pending">${unreplied} pending</span>` : `<span class="eap-chip-ok">All clear</span>`}
-            <span class="eap-scan-status" id="emailScanStatus"></span>
-          </div>
+      <!-- Address section: same layout as escrow tracker -->
+      <div class="prop-detail-head eap-head-override">
+        <div class="prop-detail-address">${escapeHtml(prop.address)}</div>
+        <div class="eap-subline">
+          <span class="eap-chip-count" id="emailCountBadge">${emailCount} email${emailCount !== 1 ? "s" : ""}</span>
+          ${unreplied > 0 ? `<span class="eap-chip-pending">${unreplied} pending</span>` : `<span class="eap-chip-ok">All clear</span>`}
+          <span class="eap-scan-status" id="emailScanStatus"></span>
         </div>
-        <button class="eap-scan-btn" id="emailScanBtn">${scanIcon} Scan</button>
+        <div class="eap-scan-row">
+          <button class="eap-scan-btn" id="emailScanBtn">${scanIcon} Scan</button>
+        </div>
       </div>
 
       <!-- Section label -->

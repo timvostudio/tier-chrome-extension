@@ -1451,46 +1451,21 @@ body {
   color: var(--text-muted);
 }
 
-/* Address card */
-.eap-addr-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 12px 14px;
-  margin: 10px 0 0;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+/* Address section override (matches prop-detail-head) */
+.eap-head-override {
+  padding-bottom: 12px;
 }
 
-.eap-addr-left { flex: 1; min-width: 0; }
-
-.eap-addr-line1 {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.eap-addr-line2 {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-top: 1px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.eap-addr-chips {
+.eap-subline {
   display: flex;
   align-items: center;
   gap: 5px;
   margin-top: 5px;
   flex-wrap: wrap;
+}
+
+.eap-scan-row {
+  margin-top: 10px;
 }
 
 .eap-chip-count {
@@ -1534,13 +1509,12 @@ body {
   background: var(--text-primary);
   color: #fff;
   border: none;
-  border-radius: 9px;
+  border-radius: 8px;
   font-size: 11px;
   font-weight: 600;
-  padding: 8px 13px;
+  padding: 7px 13px;
   cursor: pointer;
   font-family: inherit;
-  flex-shrink: 0;
   transition: opacity 100ms;
   white-space: nowrap;
 }

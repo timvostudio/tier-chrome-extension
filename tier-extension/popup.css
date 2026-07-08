@@ -299,7 +299,7 @@ body {
 
 /* Greeting */
 .intro-section {
-  padding: 16px 0 16px;
+  padding: 6px 0 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -325,34 +325,6 @@ body {
   opacity: 0.9;
 }
 
-.weather-widget {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  min-width: 52px;
-}
-
-.weather-icon {
-  font-size: 24px;
-  line-height: 1;
-}
-
-.weather-temp {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.weather-city {
-  font-size: 10px;
-  color: var(--text-muted);
-  text-align: center;
-  max-width: 64px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 .greeting {
   font-size: 18px;
@@ -589,12 +561,57 @@ body {
   margin-bottom: 18px;
 }
 
+.modal-header .modal-title {
+  flex: 1;
+}
+
+.prop-detail-email-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: none;
+  border: 1.2px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+.prop-detail-email-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.prop-detail-email-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #e5484d;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+}
+
 .back-btn {
   background: none;
   border: none;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   cursor: pointer;
   font-size: 13px;
+  font-weight: 500;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -603,6 +620,7 @@ body {
 
 .back-btn:hover {
   color: var(--text-primary);
+  opacity: 0.7;
 }
 
 .modal-title {
@@ -1172,6 +1190,7 @@ body {
 }
 
 .prop-email-btn {
+  position: relative;
   width: 26px;
   height: 26px;
   border-radius: 6px;
@@ -1183,9 +1202,28 @@ body {
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
+  overflow: visible;
   transition: background 80ms ease, color 80ms ease;
 }
 .prop-email-btn:hover { background: var(--text-primary); color: var(--bg-primary); }
+
+.prop-email-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: var(--accent-red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  border-radius: 8px;
+  text-align: center;
+  pointer-events: none;
+  box-sizing: border-box;
+}
 
 /* ── Email Archive View ────────────────────────────────────────────────────── */
 
@@ -1218,6 +1256,7 @@ body {
 
 .email-scan-status {
   font-size: 11px;
+  font-style: italic;
   color: var(--text-muted);
   min-height: 16px;
   margin-bottom: 6px;
@@ -1263,10 +1302,35 @@ body {
   min-width: 0;
 }
 
+.email-card-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .email-date {
   font-size: 10px;
   color: var(--text-muted);
   flex-shrink: 0;
+}
+
+.email-delete-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 2px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 120ms, color 120ms;
+}
+.email-card:hover .email-delete-btn {
+  opacity: 1;
+}
+.email-delete-btn:hover {
+  color: var(--accent-red);
 }
 
 .email-from {
@@ -1350,6 +1414,138 @@ body {
 }
 .email-confirm-btn:hover { opacity: 0.8; }
 
+/* ── Email Task Modal ───────────────────────────────────────────────────────── */
+.etm-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 16px;
+  animation: fadeIn 120ms ease;
+}
+
+.etm-box {
+  background: var(--bg-primary);
+  border-radius: 14px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.etm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.etm-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.etm-close {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+}
+.etm-close:hover { color: var(--text-primary); }
+
+.etm-body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.etm-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.etm-input {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-primary);
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+.etm-input:focus { border-color: var(--text-secondary); }
+
+.etm-select {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-primary);
+  outline: none;
+  width: 100%;
+  cursor: pointer;
+}
+.etm-select:focus { border-color: var(--text-secondary); }
+
+.etm-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+.etm-hint strong { color: var(--text-primary); }
+
+.etm-footer {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.etm-btn-cancel {
+  flex: 1;
+  background: var(--bg-card);
+  border: none;
+  border-radius: 8px;
+  padding: 9px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.etm-btn-cancel:hover { background: var(--bg-hover); }
+
+.etm-btn-save {
+  flex: 2;
+  background: var(--text-primary);
+  border: none;
+  border-radius: 8px;
+  padding: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--bg-primary);
+  cursor: pointer;
+}
+.etm-btn-save:hover { opacity: 0.85; }
+
 .email-added-badge {
   margin-top: 8px;
   padding-top: 8px;
@@ -1380,6 +1576,19 @@ body {
 }
 
 /* ── Escrow tracker detail view ──────────────────────────────────────────── */
+
+.prop-detail-hero {
+  margin: 10px -14px 0;
+  height: 148px;
+  overflow: hidden;
+}
+
+.prop-detail-hero-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
 
 .prop-detail-head {
   padding: 12px 0 14px;
@@ -1625,7 +1834,7 @@ body {
 /* ── Individuals Involved ──────────────────────────────────────────────────── */
 
 .individuals-section {
-  padding: 16px 0 4px;
+  padding: 10px 0 4px;
 }
 
 .individuals-header {
@@ -1906,12 +2115,13 @@ body {
   background: none;
   border: none;
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-primary);
   cursor: pointer;
   padding: 0;
   font-family: inherit;
+  font-weight: 500;
 }
-.party-back-btn:hover { color: var(--text-primary); }
+.party-back-btn:hover { opacity: 0.7; }
 
 .party-save-btn {
   background: #000;
@@ -1943,3 +2153,80 @@ body {
   opacity: 0.7;
 }
 .prop-delete-btn:hover { opacity: 1; }
+
+/* ── Task completed popup ─────────────────────────────────────────────────── */
+@keyframes tcpSlideUp   { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes tcpSlideDown { from { opacity: 1; transform: translateY(0); }   to { opacity: 0; transform: translateY(12px); } }
+
+.tcp-wrap {
+  position: absolute;
+  bottom: 56px;
+  left: 16px;
+  right: 16px;
+  z-index: 200;
+  animation: tcpSlideUp 200ms ease forwards;
+}
+.tcp-wrap.tcp-out {
+  animation: tcpSlideDown 180ms ease forwards;
+}
+.tcp-box {
+  background: var(--bg-secondary, #f5f5f5);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.10);
+}
+.tcp-check {
+  font-size: 20px;
+  color: #3a9e5f;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+.tcp-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.tcp-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 6px;
+}
+.tcp-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.tcp-btn-keep {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 14px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.tcp-btn-keep:hover { background: var(--border); }
+.tcp-btn-delete {
+  background: #e5484d;
+  border: none;
+  border-radius: 8px;
+  padding: 5px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  opacity: 0.9;
+}
+.tcp-btn-delete:hover { opacity: 1; }

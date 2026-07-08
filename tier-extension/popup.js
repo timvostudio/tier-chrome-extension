@@ -201,50 +201,6 @@ function timeOfDayIllustration() {
   }
 }
 
-function weatherIcon(code) {
-  if (code === 0) return "☀️";
-  if (code <= 2) return "🌤️";
-  if (code === 3) return "☁️";
-  if (code <= 48) return "🌫️";
-  if (code <= 55) return "🌦️";
-  if (code <= 65) return "🌧️";
-  if (code <= 77) return "🌨️";
-  if (code <= 82) return "🌦️";
-  return "⛈️";
-}
-
-async function fetchWeather() {
-  const widget = document.getElementById("weatherWidget");
-  if (!widget) return;
-  try {
-    const pos = await new Promise((res, rej) =>
-      navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 })
-    );
-    const { latitude: lat, longitude: lon } = pos.coords;
-
-    const [weatherRes, geoRes] = await Promise.all([
-      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&temperature_unit=fahrenheit`),
-      fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10`, {
-        headers: { "Accept-Language": "en" }
-      }),
-    ]);
-
-    const weather = await weatherRes.json();
-    const geo = await geoRes.json();
-
-    const temp = Math.round(weather.current_weather.temperature);
-    const icon = weatherIcon(weather.current_weather.weathercode);
-    const city = geo.address?.city || geo.address?.town || geo.address?.county || geo.address?.state || "";
-
-    widget.innerHTML = `
-      <div class="weather-icon">${icon}</div>
-      <div class="weather-temp">${temp}°F</div>
-      ${city ? `<div class="weather-city">${escapeHtml(city)}</div>` : ""}
-    `;
-  } catch {
-    widget.innerHTML = "";
-  }
-}
 
 function formatDue(deadline) {
   const date = new Date(deadline);
@@ -340,7 +296,7 @@ async function renderMain() {
   html += `<div class="today-date">${new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</div>`;
   html += `<div class="sync-label">Last synced: ${lastSync ? timeAgo(lastSync) : "never"}</div>`;
   html += `</div>`;
-  html += `<div class="intro-right">${timeOfDayIllustration()}<div class="weather-widget" id="weatherWidget"></div></div>`;
+  html += `<div class="intro-right">${timeOfDayIllustration()}</div>`;
   html += `</div>`;
   html += `<hr class="section-divider" />`;
 
@@ -357,10 +313,48 @@ async function renderMain() {
   bodyEl.innerHTML = html;
   wireTaskCards();
   wirePropertySection();
-  fetchWeather();
   const reviewBtn = document.getElementById("reviewSuggestionsBtn");
   if (reviewBtn) {
     reviewBtn.addEventListener("click", renderSuggestions);
+  }
+
+  // Silently scan all properties in the background and update badges live
+  autoScanAllProperties(properties);
+}
+
+async function autoScanAllProperties(properties) {
+  if (!properties || properties.length === 0) return;
+  let token;
+  try {
+    token = await self.TierAuth.getAuthToken(false); // non-interactive — don't interrupt the user
+  } catch { return; }
+  if (!token) return;
+
+  for (const prop of properties) {
+    if (state.view !== "main") return; // user navigated away, stop
+    try {
+      const newEmails = await scanPropertyEmails(prop);
+      if (newEmails.length > 0) {
+        if (!prop.emails) prop.emails = [];
+        prop.emails.unshift(...newEmails);
+        await self.TierStorage.saveProperty(prop);
+      }
+      // Update just the badge in-place without re-rendering everything
+      const btn = document.querySelector(`.prop-email-btn[data-prop-id="${prop.id}"]`);
+      if (!btn) continue;
+      const count = (prop.emails || []).length;
+      let badge = btn.querySelector(".prop-email-badge");
+      if (count > 0) {
+        if (!badge) {
+          badge = document.createElement("span");
+          badge.className = "prop-email-badge";
+          btn.appendChild(badge);
+        }
+        badge.textContent = count;
+      } else if (badge) {
+        badge.remove();
+      }
+    } catch { /* skip this property on error */ }
   }
 }
 
@@ -510,6 +504,44 @@ async function toggleComplete(id) {
   task.completed = !task.completed;
   await self.TierStorage.saveTask(task);
   renderMain();
+  if (task.completed) showTaskCompletedPopup(id, task.title);
+}
+
+function showTaskCompletedPopup(id, title) {
+  document.getElementById("taskCompletedPopup")?.remove();
+
+  const popup = document.createElement("div");
+  popup.id = "taskCompletedPopup";
+  popup.className = "tcp-wrap";
+  popup.innerHTML = `
+    <div class="tcp-box">
+      <div class="tcp-check">✓</div>
+      <div class="tcp-title">Task completed</div>
+      <div class="tcp-sub">${escapeHtml(title)}</div>
+      <div class="tcp-actions">
+        <button class="tcp-btn-keep" id="tcpKeep">Keep it</button>
+        <button class="tcp-btn-delete" id="tcpDelete">Delete</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("panel").appendChild(popup);
+
+  let autoDismiss = setTimeout(dismiss, 4000);
+
+  function dismiss() {
+    clearTimeout(autoDismiss);
+    popup.classList.add("tcp-out");
+    popup.addEventListener("animationend", () => popup.remove(), { once: true });
+  }
+
+  popup.querySelector("#tcpKeep").addEventListener("click", dismiss);
+  popup.querySelector("#tcpDelete").addEventListener("click", async () => {
+    dismiss();
+    const all = await self.TierStorage.getTasks();
+    await self.TierStorage.saveTasks(all.filter((t) => t.id !== id));
+    renderMain();
+  });
 }
 
 function timeAgo(ts) {
@@ -538,14 +570,14 @@ async function renderConnectScreen() {
   html += await greetingHtml();
   html += `<div class="today-date">${new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</div>`;
   html += `</div>`;
-  html += `<div class="intro-right">${timeOfDayIllustration()}<div class="weather-widget" id="weatherWidget"></div></div>`;
+  html += `<div class="intro-right">${timeOfDayIllustration()}</div>`;
   html += `</div>`;
   html += `<hr class="section-divider" />`;
   html += `<div class="connect-refresh-msg">Refresh page to show all tasks for the day</div>`;
   html += buildPropertiesSectionHtml(properties);
   bodyEl.innerHTML = html;
   wirePropertySection();
-  fetchWeather();
+  autoScanAllProperties(properties);
 }
 
 async function connectCalendar() {
@@ -908,6 +940,7 @@ function propertyCardHtml(p) {
           </div>
           <button class="prop-email-btn" data-prop-id="${p.id}" title="Email archive">
             <svg width="13" height="11" viewBox="0 0 13 11" fill="none"><rect x="0.75" y="0.75" width="11.5" height="9.5" rx="1.25" stroke="currentColor" stroke-width="1.3"/><path d="M1 2.5L6.5 6.5L12 2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            ${(p.emails || []).length > 0 ? `<span class="prop-email-badge">${(p.emails || []).length}</span>` : ""}
           </button>
         </div>
         <div class="prop-progress-track"><div class="prop-progress-fill" style="width:${prog.pct}%"></div></div>
@@ -1115,11 +1148,17 @@ async function renderPropertyDetail(propId) {
 
   const prog = propProgress(prop);
 
+  const emailCount = (prop.emails || []).length;
   let html = `
     <div class="modal-header">
       <button class="back-btn" id="propBackBtn">&larr; Back</button>
       <span class="modal-title">Escrow Tracker</span>
+      <button class="prop-detail-email-btn" id="propDetailEmailBtn" title="Email archive">
+        <svg width="15" height="12" viewBox="0 0 15 12" fill="none"><rect x="0.75" y="0.75" width="13.5" height="10.5" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M1 3L7.5 7.5L14 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        ${emailCount > 0 ? `<span class="prop-detail-email-badge">${emailCount}</span>` : ""}
+      </button>
     </div>
+    ${prop.photoUrl ? `<div class="prop-detail-hero"><img class="prop-detail-hero-img" src="${escapeHtml(prop.photoUrl)}" alt="${escapeHtml(prop.address)}" /></div>` : ""}
     <div class="prop-detail-head">
       <div class="prop-detail-address">${escapeHtml(prop.address)}</div>
       ${prop.url ? `<a class="prop-detail-link" href="${escapeHtml(prop.url)}" target="_blank">View listing ↗</a>` : ""}
@@ -1180,6 +1219,7 @@ async function renderPropertyDetail(propId) {
   bodyEl.scrollTop = 0;
 
   document.getElementById("propBackBtn").addEventListener("click", renderMain);
+  document.getElementById("propDetailEmailBtn").addEventListener("click", () => renderPropertyEmails(propId));
 
   document.getElementById("propDeleteBtn").addEventListener("click", async () => {
     if (!confirm(`Remove "${prop.address}"?`)) return;
@@ -1239,15 +1279,34 @@ async function renderPropertyDetail(propId) {
 
 // ── Property Email Archive ────────────────────────────────────────────────────
 
+function emailContainsAddress(subject, snippet, prop) {
+  const text = `${subject} ${snippet}`.toLowerCase();
+  const parts = (prop.address || "").split(/[\s,]+/).filter(Boolean);
+
+  // House number must appear
+  const houseNum = parts.find(w => /^\d+$/.test(w));
+  if (!houseNum || !text.includes(houseNum)) return false;
+
+  // At least one real street word (skip abbreviations and state codes) must appear
+  const skip = /^(blvd|ave|dr|st|rd|ln|ct|ca|ny|tx|fl|wa|or|az|nv|hi|ak)$/i;
+  const streetWords = parts.filter(w => w.length > 3 && !skip.test(w) && !/^\d+$/.test(w));
+  if (!streetWords.length) return false;
+
+  return streetWords.some(w => text.includes(w.toLowerCase()));
+}
+
 async function scanPropertyEmails(prop) {
   const token = await self.TierAuth.getAuthToken(true);
-  const addrWords = (prop.address || "")
-    .split(/[\s,]+/)
-    .filter(w => w.length > 3 && !/^(blvd|ave|dr|st|rd|ln|ct|ca|ny|tx|fl|wa)$/i.test(w))
-    .slice(0, 4);
-  if (!addrWords.length) return [];
 
-  const q = encodeURIComponent(`${addrWords.join(" OR ")} newer_than:90d`);
+  // Build search terms: house number + first real street word (AND query, not OR)
+  const parts = (prop.address || "").split(/[\s,]+/).filter(Boolean);
+  const houseNum  = parts.find(w => /^\d+$/.test(w)) || "";
+  const skip      = /^(blvd|ave|dr|st|rd|ln|ct|ca|ny|tx|fl|wa|or|az|nv|hi|ak)$/i;
+  const streetWord = parts.find(w => w.length > 3 && !skip.test(w) && !/^\d+$/.test(w)) || "";
+  if (!houseNum || !streetWord) return [];
+
+  // Gmail AND query — both terms must appear in the message
+  const q = encodeURIComponent(`"${houseNum}" "${streetWord}" newer_than:90d`);
   const listRes = await fetch(
     `https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=40&q=${q}`,
     { headers: { Authorization: `Bearer ${token}` } }
@@ -1268,15 +1327,21 @@ async function scanPropertyEmails(prop) {
     const data = await res.json();
     const headers = data.payload?.headers || [];
     const get = name => headers.find(h => h.name.toLowerCase() === name.toLowerCase())?.value || "";
+    const subject = get("Subject") || "(no subject)";
+    const snippet = data.snippet || "";
+
+    // Hard gate: only archive if subject or snippet explicitly contains the address
+    if (!emailContainsAddress(subject, snippet, prop)) continue;
+
     emails.push({
       id,
-      subject: get("Subject") || "(no subject)",
-      from:    get("From"),
-      to:      get("To"),
-      cc:      get("Cc"),
-      date:    get("Date"),
-      snippet: data.snippet || "",
-      stageIdx: null,
+      subject,
+      from:      get("From"),
+      to:        get("To"),
+      cc:        get("Cc"),
+      date:      get("Date"),
+      snippet,
+      stageIdx:  null,
       taskAdded: false,
     });
   }
@@ -1309,7 +1374,10 @@ function emailCardHtml(email, idx, stages) {
     <div class="email-card${email.taskAdded ? " email-card-done" : ""}" data-eidx="${idx}">
       <div class="email-card-header">
         <div class="email-subject">${escapeHtml(email.subject)}</div>
-        <div class="email-date">${escapeHtml(dateStr)}</div>
+        <div class="email-card-header-right">
+          <div class="email-date">${escapeHtml(dateStr)}</div>
+          <button class="email-delete-btn" data-eidx="${idx}" title="Delete email">✕</button>
+        </div>
       </div>
       <div class="email-from">From: ${escapeHtml(email.from)}</div>
       ${email.to  ? `<div class="email-meta-row">To: ${escapeHtml(email.to)}</div>`  : ""}
@@ -1319,14 +1387,14 @@ function emailCardHtml(email, idx, stages) {
         <div class="email-added-badge">✓ Added to Stage ${(email.stageIdx + 1)}: ${escapeHtml(stages[email.stageIdx]?.name || "")}</div>
       ` : stageName ? `
         <div class="email-suggest">
-          <div class="email-suggest-label">🤖 Suggested stage</div>
+          <div class="email-suggest-label"><svg width="11" height="11" viewBox="0 0 11 11" fill="none" style="display:inline-block;vertical-align:middle;margin-right:4px;margin-bottom:1px"><circle cx="5.5" cy="4.2" r="2.8" stroke="currentColor" stroke-width="1.1"/><path d="M3.8 7.2h3.4M4.4 8.8h2.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>SUGGESTED STAGE</div>
           <select class="email-stage-select" data-eidx="${idx}">
             <option value="-1">— Select a stage —</option>
             ${stageOptions}
           </select>
           <div class="email-suggest-actions">
             <span class="email-suggest-hint">AI matched: <strong>${escapeHtml(stageName)}</strong></span>
-            <button class="email-confirm-btn" data-eidx="${idx}">Add task ✓</button>
+            <button class="email-confirm-btn" data-eidx="${idx}">+ Add task</button>
           </div>
         </div>
       ` : `
@@ -1337,7 +1405,7 @@ function emailCardHtml(email, idx, stages) {
             ${stageOptions}
           </select>
           <div class="email-suggest-actions">
-            <button class="email-confirm-btn" data-eidx="${idx}">Add task ✓</button>
+            <button class="email-confirm-btn" data-eidx="${idx}">+ Add task</button>
           </div>
         </div>
       `}
@@ -1349,18 +1417,20 @@ async function renderPropertyEmails(propId) {
   bodyEl.scrollTop = 0;
 
   const props = await self.TierStorage.getProperties();
-  const prop  = props.find(p => p.id === propId);
+  let prop = props.find(p => p.id === propId);
   if (!prop) { await renderMain(); return; }
 
-  const emails = prop.emails || [];
-
-  function rebuild() {
-    document.getElementById("emailList").innerHTML =
-      emails.length === 0
-        ? `<div class="email-empty">No emails archived yet. Tap "Scan emails" to search your inbox.</div>`
-        : emails.map((e, i) => emailCardHtml(e, i, prop.stages)).join("");
+  function renderList() {
+    const listEl = document.getElementById("emailList");
+    if (!listEl) return;
+    const emails = prop.emails || [];
+    listEl.innerHTML = emails.length === 0
+      ? `<div class="email-empty">No emails yet — checking your inbox now…</div>`
+      : emails.map((e, i) => emailCardHtml(e, i, prop.stages)).join("");
     wireEmailCards(prop, emails);
   }
+
+  const scanIcon = `<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M12.5 7A5.5 5.5 0 1 1 10.6 3M12.5 1.5V4.5H9.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
   bodyEl.innerHTML = `
     <div class="modal-header">
@@ -1369,69 +1439,145 @@ async function renderPropertyEmails(propId) {
     </div>
     <div class="email-archive-head">
       <div class="prop-detail-address">${escapeHtml(prop.address)}</div>
-      <button class="email-scan-btn" id="emailScanBtn">
-        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M11.5 6.5A5 5 0 1 1 6.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 1.5L11.5 1.5L11.5 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Scan emails
-      </button>
+      <button class="email-scan-btn" id="emailScanBtn">${scanIcon} Scan emails</button>
     </div>
     <div id="emailScanStatus" class="email-scan-status"></div>
     <div id="emailList" class="email-list">
-      ${emails.length === 0
-        ? `<div class="email-empty">No emails archived yet. Tap "Scan emails" to search your inbox.</div>`
-        : emails.map((e, i) => emailCardHtml(e, i, prop.stages)).join("")}
+      ${(prop.emails || []).length === 0
+        ? `<div class="email-empty">No emails yet — checking your inbox now…</div>`
+        : (prop.emails || []).map((e, i) => emailCardHtml(e, i, prop.stages)).join("")}
     </div>`;
 
   document.getElementById("emailBackBtn").addEventListener("click", () => renderPropertyDetail(propId));
 
-  document.getElementById("emailScanBtn").addEventListener("click", async () => {
+  async function runScan(silent = false) {
     const btn    = document.getElementById("emailScanBtn");
     const status = document.getElementById("emailScanStatus");
+    if (!btn) return;
     btn.disabled = true;
-    btn.textContent = "Scanning…";
-    status.textContent = "";
+    if (!silent) { btn.textContent = "Scanning…"; }
     try {
       const newEmails = await scanPropertyEmails(prop);
       if (newEmails.length > 0) {
         if (!prop.emails) prop.emails = [];
         prop.emails.unshift(...newEmails);
         await self.TierStorage.saveProperty(prop);
-        status.textContent = `Found ${newEmails.length} new email${newEmails.length > 1 ? "s" : ""}.`;
+        if (status) status.textContent = `Found ${newEmails.length} new email${newEmails.length !== 1 ? "s" : ""}.`;
       } else {
-        status.textContent = "No new emails found.";
+        if (status && !silent) status.textContent = "No new emails found.";
       }
-      emails.length = 0;
-      emails.push(...(prop.emails || []));
-      rebuild();
+      // Re-read from prop (never mutate in place) and re-render
+      renderList();
     } catch (err) {
-      status.textContent = "Scan failed — check your connection.";
+      if (status && !silent) status.textContent = "Scan failed — check your connection.";
       console.error(err);
+      // Still render whatever is saved so existing emails don't disappear
+      renderList();
     }
-    btn.disabled = false;
-    btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M11.5 6.5A5 5 0 1 1 6.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 1.5L11.5 1.5L11.5 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Scan emails`;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `${scanIcon} Scan emails`;
+    }
+  }
+
+  document.getElementById("emailScanBtn").addEventListener("click", () => runScan(false));
+
+  // Auto-scan silently on open so new emails appear without any button tap
+  runScan(true);
+
+  wireEmailCards(prop, prop.emails || []);
+}
+
+function showAddTaskModal(email, suggestedIdx, prop, emails, onSave) {
+  // Remove any existing modal
+  document.getElementById("emailTaskModal")?.remove();
+
+  const stageOptions = prop.stages.map((s, i) =>
+    `<option value="${i}" ${i === suggestedIdx ? "selected" : ""}>${i + 1}. ${escapeHtml(s.name)}</option>`
+  ).join("");
+
+  const overlay = document.createElement("div");
+  overlay.id = "emailTaskModal";
+  overlay.className = "etm-overlay";
+  overlay.innerHTML = `
+    <div class="etm-box">
+      <div class="etm-header">
+        <span class="etm-title">Add to Escrow Stage</span>
+        <button class="etm-close" id="etmClose">✕</button>
+      </div>
+      <div class="etm-body">
+        <label class="etm-label">Task name</label>
+        <input class="etm-input" id="etmTaskName" type="text" value="${escapeHtml(email.subject)}" />
+        <label class="etm-label" style="margin-top:12px">Stage</label>
+        <select class="etm-select" id="etmStageSelect">
+          <option value="-1">— Select a stage —</option>
+          ${stageOptions}
+        </select>
+        ${suggestedIdx >= 0 ? `<div class="etm-hint">Recommended: <strong>${escapeHtml(prop.stages[suggestedIdx]?.name || "")}</strong></div>` : ""}
+      </div>
+      <div class="etm-footer">
+        <button class="etm-btn-cancel" id="etmCancel">Cancel</button>
+        <button class="etm-btn-save" id="etmSave">Add task</button>
+      </div>
+    </div>`;
+
+  document.getElementById("panel").appendChild(overlay);
+
+  const close = () => overlay.remove();
+  overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
+  document.getElementById("etmClose").addEventListener("click", close);
+  document.getElementById("etmCancel").addEventListener("click", close);
+
+  document.getElementById("etmSave").addEventListener("click", async () => {
+    const taskText = document.getElementById("etmTaskName").value.trim();
+    const stageIdx = parseInt(document.getElementById("etmStageSelect").value);
+    if (!taskText) { document.getElementById("etmTaskName").focus(); return; }
+    if (stageIdx < 0) { document.getElementById("etmStageSelect").focus(); return; }
+    await onSave(taskText, stageIdx);
+    close();
   });
 
-  wireEmailCards(prop, emails);
+  // Focus task name for quick edit
+  setTimeout(() => document.getElementById("etmTaskName")?.select(), 50);
 }
 
 function wireEmailCards(prop, emails) {
   document.querySelectorAll(".email-confirm-btn").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const idx     = parseInt(btn.dataset.eidx);
-      const select  = document.querySelector(`.email-stage-select[data-eidx="${idx}"]`);
-      const stageIdx = parseInt(select?.value ?? "-1");
-      if (stageIdx < 0) { select?.focus(); return; }
+    btn.addEventListener("click", () => {
+      const idx          = parseInt(btn.dataset.eidx);
+      const select       = document.querySelector(`.email-stage-select[data-eidx="${idx}"]`);
+      const suggestedIdx = parseInt(select?.value ?? "-1");
+      const email        = emails[idx];
 
-      const email = emails[idx];
-      const task  = { id: `email-${email.id}-${Date.now()}`, text: email.subject, completed: false };
-      prop.stages[stageIdx].tasks.push(task);
-      email.stageIdx  = stageIdx;
-      email.taskAdded = true;
-      prop.emails     = emails;
+      showAddTaskModal(email, suggestedIdx, prop, emails, async (taskText, stageIdx) => {
+        const task = { id: `email-${email.id}-${Date.now()}`, text: taskText, completed: false };
+        prop.stages[stageIdx].tasks.push(task);
+        email.stageIdx  = stageIdx;
+        email.taskAdded = true;
+        prop.emails     = emails;
+        await self.TierStorage.saveProperty(prop);
+
+        const card = document.querySelector(`.email-card[data-eidx="${idx}"]`);
+        if (card) card.outerHTML = emailCardHtml(email, idx, prop.stages);
+        wireEmailCards(prop, emails);
+      });
+    });
+  });
+
+  document.querySelectorAll(".email-delete-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const idx = parseInt(btn.dataset.eidx);
+      emails.splice(idx, 1);
+      prop.emails = emails;
       await self.TierStorage.saveProperty(prop);
 
-      const card = document.querySelector(`.email-card[data-eidx="${idx}"]`);
-      if (card) card.outerHTML = emailCardHtml(email, idx, prop.stages);
-      wireEmailCards(prop, emails);
+      const listEl = document.getElementById("emailList");
+      if (listEl) {
+        listEl.innerHTML = emails.length === 0
+          ? `<div class="email-empty">No emails archived yet. Tap "Scan emails" to search your inbox.</div>`
+          : emails.map((e, i) => emailCardHtml(e, i, prop.stages)).join("");
+        wireEmailCards(prop, emails);
+      }
     });
   });
 }

@@ -1457,8 +1457,8 @@ body {
 .ea-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-bottom: 16px;
+  gap: 14px;
+  padding-bottom: 20px;
 }
 
 /* Empty state */

@@ -1470,11 +1470,12 @@ body {
 
 .eap-chip-count {
   font-size: 10px;
-  color: var(--text-muted);
-  background: var(--bg-secondary);
-  padding: 2px 7px;
+  font-weight: 600;
+  color: #1e7a52;
+  background: rgba(48, 164, 108, 0.12);
+  padding: 2px 9px;
   border-radius: 20px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(48, 164, 108, 0.25);
 }
 
 .eap-chip-pending {
@@ -1770,10 +1771,11 @@ body {
 }
 
 .email-reply-btn {
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
+  background: #30a46c;
+  color: #fff;
+  border-color: #30a46c;
 }
-.email-reply-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.email-reply-btn:hover { background: #28905f; border-color: #28905f; }
 
 .email-ai-reply-btn {
   background: var(--text-primary);

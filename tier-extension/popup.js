@@ -1573,9 +1573,24 @@ async function renderPropertyDetail(propId) {
     <div class="prop-detail-head">
       <div class="prop-detail-address">${escapeHtml(prop.address)}</div>
       ${prop.url ? `<a class="prop-detail-link" href="${escapeHtml(prop.url)}" target="_blank">View listing ↗</a>` : ""}
-      <div class="prop-detail-progress-row">
-        <div class="prop-detail-bar"><div class="prop-detail-fill" id="overallFill" style="width:${prog.pct}%"></div></div>
-        <span class="prop-detail-pct" id="overallPct">${prog.done} / ${prog.total} stages</span>
+      <div class="spp-wrap">
+        <div class="spp-bar">
+          ${prop.stages.map((s, i) => {
+            const done    = isStageComplete(s);
+            const urgent  = !done && s.tasks.filter(t => t.fromEmail).some(t => t.isNew && !t.completed);
+            return `<div class="spp-seg${done ? " spp-done" : urgent ? " spp-alert" : ""}" data-si="${i}"></div>`;
+          }).join("")}
+        </div>
+        <div class="spp-nums">
+          ${prop.stages.map((s, i) => {
+            const done   = isStageComplete(s);
+            const urgent = !done && s.tasks.filter(t => t.fromEmail).some(t => t.isNew && !t.completed);
+            return `<span class="spp-num${done ? " spp-num-done" : urgent ? " spp-num-alert" : ""}" data-si="${i}">${i + 1}</span>`;
+          }).join("")}
+        </div>
+        <div class="spp-footer">
+          <span class="prop-detail-pct" id="overallPct">${prog.done} / ${prog.total} stages</span>
+        </div>
       </div>
     </div>
   `;
@@ -1600,6 +1615,8 @@ async function renderPropertyDetail(propId) {
                      : allDone ? `<span class="stage-notif-dot stage-notif-done" id="snd-${si}">✓</span>`
                      : "";
 
+    const hasStageReminder = !!stage.reminder;
+
     html += `
       <div class="stage-card${done ? " stage-done" : ""}" id="sc-${si}">
         <div class="stage-header" data-si="${si}">
@@ -1609,14 +1626,19 @@ async function renderPropertyDetail(propId) {
               <div class="stage-name">${escapeHtml(stage.name)}</div>
               ${notifDot}
             </div>
+            ${hasStageReminder ? `<span class="stage-reminder-badge" id="srb-${si}">${escapeHtml(stage.reminder.label)}</span>` : `<span class="stage-reminder-badge" id="srb-${si}" style="display:none"></span>`}
             ${stage.hint ? `<div class="stage-hint">${escapeHtml(stage.hint)}</div>` : ""}
             ${stage.tasks.length > 0 ? `
               <div class="stage-task-count" id="stc-${si}">${doneC}/${stage.tasks.length} tasks</div>
               <div class="stage-mini-bar"><div class="stage-mini-fill" id="smf-${si}" style="width:${Math.round((doneC/stage.tasks.length)*100)}%"></div></div>
             ` : ""}
           </div>
+          <button class="stage-clock-btn${hasStageReminder ? " stage-clock-active" : ""}" id="scb-${si}" data-si="${si}" title="${hasStageReminder ? "Edit reminder" : "Set reminder"}">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.2"/><path d="M6 4V6.5L7.5 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          </button>
           <div class="stage-chevron" id="schev-${si}">${stage.expanded ? "▴" : "▾"}</div>
         </div>
+        <div class="stage-reminder-slot" id="srs-${si}"></div>
         <div class="stage-body" id="sb-${si}" style="display:${stage.expanded ? "block" : "none"}">
           <div class="stage-tasks-list" id="stl-${si}">
             ${stage.tasks.map((task, ti) => stageTaskHtml(si, ti, task)).join("")}
@@ -1678,6 +1700,72 @@ async function renderPropertyDetail(propId) {
 
   wireStageTaskEvents(prop);
   wireIndividualsSection(prop);
+
+  // Stage-level reminder clock buttons
+  bodyEl.querySelectorAll(".stage-clock-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleStageReminderPanel(parseInt(btn.dataset.si), prop);
+    });
+  });
+
+  // Step indicator — click scrolls to stage; hover shows tooltip with stage name
+  let sppTip = document.getElementById("sppTip");
+  if (!sppTip) {
+    sppTip = document.createElement("div");
+    sppTip.id = "sppTip";
+    sppTip.className = "spp-tooltip";
+    document.body.appendChild(sppTip);
+  }
+
+  bodyEl.querySelectorAll(".spp-seg, .spp-num").forEach((el) => {
+    const si = parseInt(el.dataset.si);
+    const stageName = prop.stages[si]?.name || "";
+
+    el.addEventListener("click", () => {
+      const card = document.getElementById(`sc-${si}`);
+      if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
+    el.addEventListener("mouseenter", () => {
+      const stage      = prop.stages[si];
+      const totalTasks = stage?.tasks?.length || 0;
+      const doneCount  = stage?.tasks?.filter(t => t.completed).length || 0;
+      const urgent     = stage?.tasks?.filter(t => t.fromEmail).some(t => t.isNew && !t.completed);
+      const isDone     = isStageComplete(stage);
+
+      let html = `<div class="spp-tip-title">Step ${si + 1}: ${escapeHtml(stageName)}</div>`;
+      if (totalTasks > 0) {
+        html += `<div class="spp-tip-tasks">${doneCount}/${totalTasks} task${totalTasks !== 1 ? "s" : ""} done</div>`;
+      }
+      if (urgent) {
+        html += `<div class="spp-tip-urgent">&#9888; Needs immediate attention</div>`;
+      } else if (isDone) {
+        html += `<div class="spp-tip-done">&#10003; Stage complete</div>`;
+      }
+      sppTip.innerHTML = html;
+      sppTip.classList.add("visible");
+
+      const rect       = el.getBoundingClientRect();
+      const panelRect  = document.getElementById("panel").getBoundingClientRect();
+      const tipW       = sppTip.offsetWidth;
+      const segCenterX = rect.left + rect.width / 2;
+
+      let tipLeft = segCenterX - tipW / 2;
+      tipLeft = Math.max(panelRect.left + 4, Math.min(tipLeft, panelRect.right - tipW - 4));
+
+      sppTip.style.left      = tipLeft + "px";
+      sppTip.style.top       = (rect.top - 8) + "px";
+      sppTip.style.transform = "translateY(-100%)";
+
+      const arrowLeft = segCenterX - tipLeft;
+      sppTip.style.setProperty("--arrow-left", arrowLeft + "px");
+    });
+
+    el.addEventListener("mouseleave", () => {
+      sppTip.classList.remove("visible");
+    });
+  });
 
   // Add-task inputs
   bodyEl.querySelectorAll(".stage-add-input").forEach((input) => {
@@ -1829,15 +1917,18 @@ function emailCardHtml(email, idx, stages) {
 
   const lightbulbSvg = `<svg width="10" height="10" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="4.2" r="2.8" stroke="currentColor" stroke-width="1.1"/><path d="M3.8 7.2h3.4M4.4 8.8h2.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>`;
 
+  const isPending = !email.replied && !email.taskAdded;
+
   return `
-    <div class="email-card${email.taskAdded ? " email-card-done" : ""}${email.replied ? " email-card-replied" : ""}" data-eidx="${idx}">
+    <div class="email-card${email.taskAdded ? " email-card-done" : ""}${email.replied ? " email-card-replied" : ""}${isPending ? " email-card-pending" : ""}" data-eidx="${idx}">
 
       <!-- Card header row -->
       <div class="ec-head">
-        <div class="ec-avatar" style="background:${avatarBg}">${escapeHtml(initial)}</div>
+        <div class="ec-avatar${isPending ? " ec-avatar-pending" : ""}" style="background:${avatarBg}">${escapeHtml(initial)}</div>
         <div class="ec-meta">
           <div class="ec-subject">${escapeHtml(email.subject)}</div>
           <div class="ec-from">${escapeHtml(senderName)}<span class="ec-addr"> · ${escapeHtml(senderAddr)}</span></div>
+          ${isPending ? `<span class="ec-pending-tag">Needs action</span>` : ""}
         </div>
         <div class="ec-head-right">
           <span class="ec-date">${escapeHtml(dateStr)}</span>
@@ -1920,20 +2011,27 @@ async function renderPropertyEmails(propId) {
   let prop = props.find(p => p.id === propId);
   if (!prop) { await renderMain(); return; }
 
-  function renderList() {
+  function renderList(filter) {
     const listEl = document.getElementById("emailList");
     if (!listEl) return;
-    const emails = prop.emails || [];
+    const allEmails = prop.emails || [];
+    const emails = filter === "pending"
+      ? allEmails.filter(e => !e.replied && !e.taskAdded)
+      : allEmails;
+
+    const sc = document.getElementById("emailSectionCount");
+    if (sc) sc.textContent = emails.length > 0 ? emails.length : "";
+
     if (emails.length === 0) {
       listEl.innerHTML = `<div class="ea-empty">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M2 7.5L12 13L22 7.5" stroke="currentColor" stroke-width="1.2"/></svg>
-        <div class="ea-empty-title">No emails yet</div>
-        <div class="ea-empty-sub">Tap Scan to check your inbox</div>
+        <div class="ea-empty-title">${filter === "pending" ? "No pending emails" : "No emails yet"}</div>
       </div>`;
+      wireEmailCards(prop, []);
     } else {
       listEl.innerHTML = emails.map((e, i) => emailCardHtml(e, i, prop.stages)).join("");
+      wireEmailCards(prop, emails);
     }
-    wireEmailCards(prop, emails);
   }
 
   const scanIcon    = `<svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M12.5 7A5.5 5.5 0 1 1 10.6 3M12.5 1.5V4.5H9.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -1956,47 +2054,59 @@ async function renderPropertyEmails(propId) {
         </div>
       ` : ""}
 
-      <!-- Address section: same layout as escrow tracker -->
+      <!-- Address section: each chip is independently clickable -->
       <div class="prop-detail-head eap-head-override">
         <div class="prop-detail-address">${escapeHtml(prop.address)}</div>
         <div class="eap-subline">
-          <span class="eap-chip-count" id="emailCountBadge">${emailCount} email${emailCount !== 1 ? "s" : ""}</span>
-          ${unreplied > 0 ? `<span class="eap-chip-pending">${unreplied} pending</span>` : `<span class="eap-chip-ok">All clear</span>`}
+          <button class="eap-chip-count eap-chip-btn" id="emailChipAll">${emailCount} email${emailCount !== 1 ? "s" : ""}</button>
+          ${unreplied > 0
+            ? `<button class="eap-chip-pending eap-chip-btn" id="emailChipPending">${unreplied} pending</button>`
+            : `<span class="eap-chip-ok">All clear</span>`}
           <span class="eap-scan-status" id="emailScanStatus"></span>
         </div>
-        <div class="eap-scan-row">
-          <button class="eap-scan-btn" id="emailScanBtn">${scanIcon} Scan</button>
+      </div>
+
+      <!-- Email list (collapsed by default, label driven by active chip) -->
+      <div id="emailListWrap" style="display:none">
+        <div class="eap-section-label">
+          <span id="emailSectionLabel">All Messages</span>
+          <span class="eap-section-count" id="emailSectionCount"></span>
         </div>
-      </div>
-
-      <!-- Section label -->
-      <div class="eap-section-label">
-        <span>Messages</span>
-        <span class="eap-section-count">${emailCount > 0 ? emailCount : ""}</span>
-      </div>
-
-      <!-- Email list -->
-      <div id="emailList" class="ea-list">
-        ${emailCount === 0
-          ? `<div class="ea-empty">
-               <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M2 7.5L12 13L22 7.5" stroke="currentColor" stroke-width="1.2"/></svg>
-               <div class="ea-empty-title">No emails yet</div>
-               <div class="ea-empty-sub">Tap Scan to check your inbox</div>
-             </div>`
-          : (prop.emails || []).map((e, i) => emailCardHtml(e, i, prop.stages)).join("")}
+        <div id="emailList" class="ea-list"></div>
       </div>
 
     </div>`;
 
   document.getElementById("emailBackBtn").addEventListener("click", () => renderPropertyDetail(propId));
 
+  // Track which filter is active so toggling the same chip collapses
+  let activeFilter = null;
+
+  function openFilter(filter) {
+    const wrap = document.getElementById("emailListWrap");
+    const labelEl = document.getElementById("emailSectionLabel");
+    if (activeFilter === filter) {
+      // Collapse
+      activeFilter = null;
+      wrap.style.display = "none";
+      document.getElementById("emailChipAll")?.classList.remove("eap-chip-active");
+      document.getElementById("emailChipPending")?.classList.remove("eap-chip-active");
+      return;
+    }
+    activeFilter = filter;
+    wrap.style.display = "block";
+    document.getElementById("emailChipAll")?.classList.toggle("eap-chip-active", filter === "all");
+    document.getElementById("emailChipPending")?.classList.toggle("eap-chip-active", filter === "pending");
+    if (labelEl) labelEl.textContent = filter === "pending" ? "Needs Action" : "All Messages";
+    renderList(filter);
+  }
+
+  document.getElementById("emailChipAll")?.addEventListener("click", () => openFilter("all"));
+  document.getElementById("emailChipPending")?.addEventListener("click", () => openFilter("pending"));
+
   async function runScan(silent = false) {
-    const btn        = document.getElementById("emailScanBtn");
     const status     = document.getElementById("emailScanStatus");
     const countBadge = document.getElementById("emailCountBadge");
-    if (!btn) return;
-    btn.disabled = true;
-    if (!silent) btn.innerHTML = `<span class="ea-spin"></span> Scanning…`;
     try {
       const newEmails = await scanPropertyEmails(prop);
       if (newEmails.length > 0) {
@@ -2008,18 +2118,15 @@ async function renderPropertyEmails(propId) {
       } else {
         if (status && !silent) status.textContent = "Up to date";
       }
-      renderList();
+      if (activeFilter) renderList(activeFilter);
     } catch (err) {
       if (status && !silent) status.textContent = "Scan failed";
       console.error(err);
-      renderList();
+      if (activeFilter) renderList(activeFilter);
     }
-    if (btn) { btn.disabled = false; btn.innerHTML = `${scanIcon} Scan`; }
   }
 
-  document.getElementById("emailScanBtn").addEventListener("click", () => runScan(false));
   runScan(true);
-  wireEmailCards(prop, prop.emails || []);
 }
 
 function showAddTaskModal(email, suggestedIdx, prop, emails, onSave) {
@@ -2195,7 +2302,7 @@ function reRenderEmailList(prop, emails) {
     listEl.innerHTML = `<div class="ea-empty">
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M2 7.5L12 13L22 7.5" stroke="currentColor" stroke-width="1.2"/></svg>
       <div class="ea-empty-title">No emails yet</div>
-      <div class="ea-empty-sub">Tap Scan to check your inbox</div>
+      <div class="ea-empty-sub">Tap Refresh Inbox to check your inbox</div>
     </div>`;
   } else {
     listEl.innerHTML = emails.map((e, i) => emailCardHtml(e, i, prop.stages)).join("");
@@ -2687,6 +2794,127 @@ function toggleStageTaskReminderPanel(si, ti, prop) {
   });
 }
 
+function toggleStageReminderPanel(si, prop) {
+  const slot = document.getElementById(`srs-${si}`);
+  if (!slot) return;
+
+  if (slot.querySelector(".str-panel")) {
+    slot.innerHTML = "";
+    return;
+  }
+
+  // Close any other open stage reminder panels
+  document.querySelectorAll(".stage-reminder-slot .str-panel").forEach(p => p.closest(".stage-reminder-slot").innerHTML = "");
+
+  const stage   = prop.stages[si];
+  const current = stage.reminder;
+  const activeLabel = current?.label || "1 hr";
+
+  const panel = document.createElement("div");
+  panel.className = "str-panel stage-str-panel";
+  panel.innerHTML = `
+    <div class="str-panel-inner">
+      <div class="str-panel-top">
+        <span class="str-panel-title">Stage Reminder</span>
+        <label class="reminder-toggle-wrap">
+          <input type="checkbox" class="str-toggle" ${current ? "checked" : ""} />
+          <span class="reminder-toggle-track"><span class="reminder-toggle-thumb"></span></span>
+        </label>
+      </div>
+      <div class="str-panel-body" style="display:${current ? "block" : "none"}">
+        <div class="str-presets">
+          ${STAGE_REMINDER_PRESETS.map(p =>
+            `<button class="rp-btn str-preset${p.label === activeLabel && current ? " rp-active" : ""}" data-mins="${p.mins ?? ""}" data-label="${p.label}">${p.label}</button>`
+          ).join("")}
+        </div>
+        <div class="reminder-custom-row str-custom-row" style="display:${activeLabel === "Custom" && current ? "flex" : "none"}">
+          <span class="reminder-custom-label">Every</span>
+          <input type="number" class="reminder-custom-num str-custom-num" value="${current?.customVal || 1}" min="1" max="999" />
+          <select class="reminder-custom-unit str-custom-unit">
+            <option value="minutes" ${current?.unit === "minutes" ? "selected" : ""}>minutes</option>
+            <option value="hours"   ${current?.unit === "hours"   ? "selected" : ""}>hours</option>
+            <option value="days"    ${current?.unit === "days"    ? "selected" : ""}>days</option>
+          </select>
+        </div>
+        <div class="reminder-time-row str-time-row" style="display:${current?.intervalMins >= 1440 ? "flex" : "none"}">
+          <span class="reminder-custom-label">At</span>
+          <input type="time" class="reminder-time-input str-time-input" value="${current?.time || "09:00"}" />
+        </div>
+      </div>
+      <div class="str-panel-footer">
+        <button class="str-cancel">Cancel</button>
+        <button class="str-save">Save</button>
+      </div>
+    </div>`;
+
+  slot.appendChild(panel);
+
+  const toggle    = panel.querySelector(".str-toggle");
+  const body      = panel.querySelector(".str-panel-body");
+  const presets   = panel.querySelectorAll(".str-preset");
+  const customRow = panel.querySelector(".str-custom-row");
+  const timeRow   = panel.querySelector(".str-time-row");
+
+  toggle.addEventListener("change", () => {
+    body.style.display = toggle.checked ? "block" : "none";
+  });
+
+  presets.forEach(btn => {
+    btn.addEventListener("click", () => {
+      presets.forEach(b => b.classList.remove("rp-active"));
+      btn.classList.add("rp-active");
+      const isCustom = btn.dataset.label === "Custom";
+      const isLong   = !isCustom && Number(btn.dataset.mins) >= 1440;
+      customRow.style.display = isCustom ? "flex" : "none";
+      timeRow.style.display   = isLong   ? "flex" : "none";
+    });
+  });
+
+  panel.querySelector(".str-cancel").addEventListener("click", () => slot.innerHTML = "");
+
+  panel.querySelector(".str-save").addEventListener("click", async () => {
+    if (!toggle.checked) {
+      prop.stages[si].reminder = null;
+    } else {
+      const activeBtn  = panel.querySelector(".str-preset.rp-active");
+      const label      = activeBtn?.dataset.label || "1 hr";
+      const presetMins = activeBtn?.dataset.mins ? Number(activeBtn.dataset.mins) : null;
+      let intervalMins = presetMins;
+
+      if (label === "Custom" || !presetMins) {
+        const val  = parseInt(panel.querySelector(".str-custom-num")?.value || "1");
+        const unit = panel.querySelector(".str-custom-unit")?.value || "hours";
+        intervalMins = unit === "minutes" ? val : unit === "hours" ? val * 60 : val * 1440;
+      }
+
+      const time = panel.querySelector(".str-time-input")?.value || "09:00";
+      prop.stages[si].reminder = {
+        intervalMins,
+        label,
+        unit:      label === "Custom" ? (panel.querySelector(".str-custom-unit")?.value || "hours") : null,
+        customVal: label === "Custom" ? parseInt(panel.querySelector(".str-custom-num")?.value || "1") : null,
+        time,
+        nextAt: Date.now() + intervalMins * 60 * 1000,
+      };
+    }
+
+    await self.TierStorage.saveProperty(prop);
+    slot.innerHTML = "";
+
+    // Update badge and clock button state without full re-render
+    const badge = document.getElementById(`srb-${si}`);
+    const clkBtn = document.getElementById(`scb-${si}`);
+    if (badge) {
+      badge.textContent = prop.stages[si].reminder?.label || "";
+      badge.style.display = prop.stages[si].reminder ? "" : "none";
+    }
+    if (clkBtn) {
+      clkBtn.classList.toggle("stage-clock-active", !!prop.stages[si].reminder);
+      clkBtn.title = prop.stages[si].reminder ? "Edit reminder" : "Set reminder";
+    }
+  });
+}
+
 function wireStageTaskDrag(listEl, prop, si) {
   let dragSrc = null;
 
@@ -2819,10 +3047,22 @@ function refreshStageNum(si, stage) {
 
 function updateOverallBar(prop) {
   const prog = propProgress(prop);
-  const fill = document.getElementById("overallFill");
   const pct  = document.getElementById("overallPct");
-  if (fill) fill.style.width = `${prog.pct}%`;
-  if (pct)  pct.textContent = `${prog.done} / ${prog.total} stages`;
+  if (pct) pct.textContent = `${prog.done} / ${prog.total} stages`;
+  prop.stages.forEach((s, i) => {
+    const done   = isStageComplete(s);
+    const urgent = !done && s.tasks.filter(t => t.fromEmail).some(t => t.isNew && !t.completed);
+    const seg = document.querySelector(`.spp-seg[data-si="${i}"]`);
+    const num = document.querySelector(`.spp-num[data-si="${i}"]`);
+    if (seg) {
+      seg.classList.toggle("spp-done",  done);
+      seg.classList.toggle("spp-alert", urgent);
+    }
+    if (num) {
+      num.classList.toggle("spp-num-done",  done);
+      num.classList.toggle("spp-num-alert", urgent);
+    }
+  });
 }
 
 // ── Command chatbox — offline, no API key required ───────────────────────────

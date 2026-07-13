@@ -1464,9 +1464,6 @@ body {
   flex-wrap: wrap;
 }
 
-.eap-scan-row {
-  margin-top: 10px;
-}
 
 .eap-chip-count {
   font-size: 10px;
@@ -1485,6 +1482,27 @@ body {
   background: rgba(229,72,77,0.1);
   padding: 2px 7px;
   border-radius: 20px;
+  border: 1px solid rgba(229,72,77,0.2);
+}
+
+/* Chip as button */
+.eap-chip-btn {
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity 120ms, box-shadow 120ms;
+}
+.eap-chip-btn:hover { opacity: 0.75; }
+
+/* Active state — filled solid when selected */
+.eap-chip-count.eap-chip-active {
+  background: #30a46c;
+  color: #fff;
+  border-color: #30a46c;
+}
+.eap-chip-pending.eap-chip-active {
+  background: #c84040;
+  color: #fff;
+  border-color: #c84040;
 }
 
 .eap-chip-ok {
@@ -1503,24 +1521,6 @@ body {
 }
 .eap-scan-status.ea-status-new { color: var(--accent-green); font-style: normal; font-weight: 600; }
 
-.eap-scan-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: var(--text-primary);
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 7px 13px;
-  cursor: pointer;
-  font-family: inherit;
-  transition: opacity 100ms;
-  white-space: nowrap;
-}
-.eap-scan-btn:hover    { opacity: 0.8; }
-.eap-scan-btn:disabled { opacity: 0.4; cursor: default; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 .ea-spin {
@@ -1588,6 +1588,33 @@ body {
 .email-card:hover          { border-color: var(--border-light); }
 .email-card.email-card-done    { border-color: rgba(48,164,108,0.4); }
 .email-card.email-card-replied { opacity: 0.8; }
+
+.email-card.email-card-pending {
+  border-color: rgba(245, 158, 11, 0.38);
+  box-shadow: inset 3px 0 0 rgba(245, 158, 11, 0.75);
+  background: rgba(255, 251, 235, 0.55);
+}
+.email-card.email-card-pending:hover {
+  border-color: rgba(245, 158, 11, 0.55);
+}
+
+.ec-avatar-pending {
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.55);
+}
+
+.ec-pending-tag {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.13);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
 
 /* Card head row */
 .ec-head {
@@ -2133,6 +2160,136 @@ body {
   white-space: nowrap;
 }
 
+/* ── Step indicator (22-segment stepper) ─────────────────────────────── */
+.spp-wrap {
+  margin-top: 10px;
+}
+
+.spp-bar {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+}
+
+.spp-seg {
+  flex: 1;
+  background: var(--bg-hover);
+  border-radius: 1.5px;
+  cursor: pointer;
+  transition: background 200ms ease, opacity 120ms;
+}
+
+.spp-seg:hover {
+  opacity: 0.72;
+}
+
+.spp-seg.spp-done {
+  background: var(--accent-green);
+}
+
+.spp-seg.spp-alert {
+  background: #e5484d;
+  animation: spp-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes spp-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
+
+.spp-nums {
+  display: flex;
+  margin-top: 3px;
+}
+
+.spp-num {
+  flex: 1;
+  font-size: 7.5px;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 200ms ease;
+  user-select: none;
+}
+
+.spp-num:hover {
+  color: var(--text-primary);
+}
+
+.spp-num.spp-num-done {
+  color: var(--accent-green);
+  font-weight: 600;
+}
+
+.spp-num.spp-num-alert {
+  color: #e5484d;
+  font-weight: 700;
+}
+
+.spp-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 5px;
+}
+
+.spp-tooltip {
+  position: fixed;
+  background: #111111;
+  color: #ffffff;
+  font-size: 10.5px;
+  font-weight: 500;
+  padding: 7px 10px;
+  border-radius: 7px;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+}
+
+.spp-tip-title {
+  font-weight: 600;
+  font-size: 10.5px;
+}
+
+.spp-tip-tasks {
+  font-size: 9.5px;
+  opacity: 0.7;
+  margin-top: 1px;
+}
+
+.spp-tip-urgent {
+  font-size: 9.5px;
+  color: #f87171;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.spp-tip-done {
+  font-size: 9.5px;
+  color: #4ade80;
+  margin-top: 2px;
+}
+
+.spp-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: var(--arrow-left, 50%);
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #111111;
+}
+
+.spp-tooltip.visible {
+  opacity: 1;
+}
+
 /* Stage list */
 .stage-list { display: flex; flex-direction: column; gap: 6px; padding-bottom: 4px; }
 
@@ -2244,6 +2401,48 @@ body {
   color: var(--text-muted);
   flex-shrink: 0;
   transition: transform 120ms ease;
+}
+
+/* Stage-level clock / reminder badge */
+.stage-clock-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 120ms, color 120ms;
+  flex-shrink: 0;
+}
+.stage-header:hover .stage-clock-btn { opacity: 0.5; }
+.stage-clock-btn:hover  { opacity: 1 !important; color: var(--text-primary); }
+.stage-clock-btn.stage-clock-active {
+  opacity: 1;
+  color: #b45309;
+}
+
+.stage-reminder-badge {
+  display: inline-block;
+  margin-top: 3px;
+  font-size: 9px;
+  font-weight: 600;
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 4px;
+  padding: 1px 5px;
+  cursor: pointer;
+}
+
+.stage-reminder-slot { }
+
+.stage-str-panel {
+  margin: 0 12px 0;
+  border-top: 1px solid var(--border);
 }
 
 /* Stage body */

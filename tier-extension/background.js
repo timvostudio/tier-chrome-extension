@@ -54,11 +54,22 @@ async function fireTaskReminders() {
     }
     if (tasksDirty) await self.TierStorage.saveTasks(tasks);
 
-    // Property stage tasks
+    // Property stage tasks + stage-level reminders
     const props = await self.TierStorage.getProperties();
     for (const prop of props) {
       let propDirty = false;
       for (const stage of (prop.stages || [])) {
+        // Stage-level reminder
+        if (stage.reminder?.nextAt && now >= stage.reminder.nextAt) {
+          chrome.notifications.create(`tier-sr-${prop.id}-${stage.name}-${now}`, {
+            type: "basic", iconUrl: "icons/icon128.png",
+            title: `Tier — ${stage.name}`,
+            message: `Reminder: follow up on "${stage.name}" for ${prop.address}`,
+          });
+          stage.reminder.nextAt = now + stage.reminder.intervalMins * 60 * 1000;
+          propDirty = true;
+        }
+        // Individual task reminders within the stage
         for (const stTask of (stage.tasks || [])) {
           if (stTask.completed || !stTask.reminder?.nextAt) continue;
           if (now < stTask.reminder.nextAt) continue;
